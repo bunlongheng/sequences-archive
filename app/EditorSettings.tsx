@@ -90,14 +90,14 @@ function IconBtn({ active, onClick, accent = "#0a84ff", inactiveBg = "#2a2a2c", 
 
 // ── Settings content (shared between desktop panel + mobile sheet) ─────────────
 export function SettingsContent({
-    opts, layout, copied, copiedLink, copiedImage, copiedShare, mobile = false, participants = [], isSequence = true,
-    upd, updL, exportPng, exportSvg, copyImage, exportCode, exportJson, copyCode, copyLink, share, viewUrl, tab, setTab, selectedPid, onAutoIcons,
+    opts, layout, copied, copiedLink, copiedSvg, copiedShare, mobile = false, participants = [], isSequence = true,
+    upd, updL, exportPng, exportSvg, copySvg, exportCode, exportJson, copyCode, copyLink, share, viewUrl, tab, setTab, selectedPid, onAutoIcons,
 }: {
-    opts: Opts; layout: Layout; copied: boolean; copiedLink: boolean; copiedImage: boolean; copiedShare: boolean;
+    opts: Opts; layout: Layout; copied: boolean; copiedLink: boolean; copiedSvg: boolean; copiedShare: boolean;
     mobile?: boolean; participants?: Participant[]; isSequence?: boolean; viewUrl: string | null;
     upd: (p: Partial<Opts>) => void;
     updL: (p: Partial<Layout>) => void;
-    exportPng: () => void; exportSvg: () => void; copyImage: () => void; exportCode: () => void; exportJson: () => void;
+    exportPng: () => void; exportSvg: () => void; copySvg: () => void; exportCode: () => void; exportJson: () => void;
     copyCode: () => void; copyLink: () => void; share: () => void;
     onAutoIcons?: () => void;
     tab: "general" | "components" | "share"; setTab: (t: "general" | "components" | "share") => void;
@@ -242,10 +242,10 @@ export function SettingsContent({
                             style={{ background: copiedLink ? "#A9DC76" : "#A9DC76", color: "#221F22", cursor: "pointer", padding: mobile ? "9px 0" : "7px 0", fontSize: fs(11) }}>
                             {copiedLink ? "Copied!" : "Link"}
                         </button>
-                        <button onClick={copyImage} title="Copy the diagram as a high-resolution image, ready to paste"
+                        <button onClick={copySvg} title="Copy the diagram as SVG, fitted to the whole diagram"
                             className="rounded-xl font-semibold transition-all hover:brightness-110 active:scale-95"
-                            style={{ background: copiedImage ? "#A9DC76" : "#FFD866", color: "#221F22", cursor: "pointer", padding: mobile ? "9px 0" : "7px 0", fontSize: fs(11) }}>
-                            {copiedImage ? "Copied!" : "Copy"}
+                            style={{ background: copiedSvg ? "#A9DC76" : "#FFD866", color: "#221F22", cursor: "pointer", padding: mobile ? "9px 0" : "7px 0", fontSize: fs(11) }}>
+                            {copiedSvg ? "Copied!" : "Copy"}
                         </button>
                         {/* Row 3 */}
                         <button onClick={share}

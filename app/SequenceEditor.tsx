@@ -62,7 +62,7 @@ export default function SequenceEditor() {
     const [codeWidth, setCodeWidth] = useState(340);
     const [copied, setCopied] = useState(false);
     const [copiedLink, setCopiedLink] = useState(false);
-    const [copiedImage, setCopiedImage] = useState(false);
+    const [copiedSvg, setCopiedSvg] = useState(false);
     const [copiedShare, setCopiedShare] = useState(false);
     const [diagramLoading, setDiagramLoading] = useState(false);
     const [hasFit, setHasFit] = useState(false);
@@ -670,21 +670,52 @@ export default function SequenceEditor() {
     // browsers only accept image/png as an image on the clipboard, and apps
     // that also see text/plain paste the markup as text instead of the picture.
     // The Code button already copies the source for that case.
-    const copyImage = useCallback(() => {
-        const svgStr = activeSvg;
+    // Copies the diagram as SVG source, fitted to the whole diagram rather than
+    // whatever is currently on screen. Zoom and pan live on a wrapper element and
+    // are never baked into the SVG, so the markup already covers the full drawing.
+    //
+    // Two renderers to cover: sequence diagrams come from buildSvg as a string
+    // (already width/height/viewBox = the whole diagram), every other Mermaid type
+    // is rendered into the DOM, so that one is read back off the live node and
+    // normalized - Mermaid emits `style="max-width:…"` and often no height, which
+    // pastes at the wrong size.
+    const copySvg = useCallback(() => {
+        let svgStr = activeSvg;
+
+        if (!svgStr) {
+            const node = svgWrapRef.current?.querySelector("svg");
+            if (node) {
+                const clone = node.cloneNode(true) as SVGSVGElement;
+                let vb = clone.getAttribute("viewBox");
+                if (!vb) {
+                    const bb = (node as SVGGraphicsElement).getBBox();
+                    vb = `${bb.x} ${bb.y} ${bb.width} ${bb.height}`;
+                    clone.setAttribute("viewBox", vb);
+                }
+                const [, , vw, vh] = vb.split(/[\s,]+/).map(Number);
+                if (vw && vh) { clone.setAttribute("width", String(vw)); clone.setAttribute("height", String(vh)); }
+                clone.style.maxWidth = "";
+                clone.removeAttribute("style");
+                if (!clone.getAttribute("xmlns")) clone.setAttribute("xmlns", "http://www.w3.org/2000/svg");
+                svgStr = new XMLSerializer().serializeToString(clone);
+            }
+        }
+
         if (!svgStr) { showToast("Paste a diagram first", { color: "#f59e0b" }); return; }
 
-        if (typeof ClipboardItem === "undefined" || !navigator.clipboard?.write) {
-            showToast("Clipboard images are not supported here - use PNG", { color: "#f59e0b" });
-            return;
-        }
-        // ClipboardItem has to be constructed inside the click itself (Safari
-        // drops the user gesture across an await), so hand it the pending
-        // promise rather than resolving the blob first.
-        navigator.clipboard.write([new ClipboardItem({ "image/png": rasterize(svgStr, 3) })])
-            .then(() => { setCopiedImage(true); setTimeout(() => setCopiedImage(false), 1500); })
-            .catch(() => showToast("Copy failed - use the PNG download", { color: "#ef4444" }));
-    }, [activeSvg, rasterize]);
+        const confirm = () => { setCopiedSvg(true); setTimeout(() => setCopiedSvg(false), 1500); };
+        navigator.clipboard.writeText(svgStr).then(confirm).catch(() => {
+            // Older browsers / non-secure contexts reject the async clipboard API.
+            try {
+                const ta = document.createElement("textarea");
+                ta.value = svgStr!; ta.style.position = "fixed"; ta.style.opacity = "0";
+                document.body.appendChild(ta); ta.focus(); ta.select();
+                document.execCommand("copy");
+                document.body.removeChild(ta);
+                confirm();
+            } catch { showToast("Copy failed", { color: "#ef4444" }); }
+        });
+    }, [activeSvg]);
 
     const exportCode = useCallback(() => {
         const a = document.createElement("a");
@@ -1614,8 +1645,8 @@ No explanation, no markdown, just the JSON object.`,
                 {!isMobile && showSettings && (
                     <div className="shrink-0 flex flex-col" style={{ width: 268, background: ut.panelBg, borderLeft: `1px solid ${ut.panelBorder}` }}>
                             <div className="flex-1 overflow-y-auto" style={{ padding: "12px 12px" }}>
-                            <SettingsContent opts={opts} layout={computedLayout} copied={copied} copiedLink={copiedLink} copiedImage={copiedImage} copiedShare={copiedShare} participants={diagram.participants} isSequence={isSequence}
-                                upd={upd} updL={updL} exportPng={exportPng} exportSvg={exportSvg} copyImage={copyImage} exportCode={exportCode} exportJson={exportJson} copyCode={copyCode} copyLink={copyLink} share={share} viewUrl={mounted ? buildViewUrl() : ""} tab={settingsTab} setTab={setSettingsTab} selectedPid={selectedPid} onAutoIcons={autoIcons} />
+                            <SettingsContent opts={opts} layout={computedLayout} copied={copied} copiedLink={copiedLink} copiedSvg={copiedSvg} copiedShare={copiedShare} participants={diagram.participants} isSequence={isSequence}
+                                upd={upd} updL={updL} exportPng={exportPng} exportSvg={exportSvg} copySvg={copySvg} exportCode={exportCode} exportJson={exportJson} copyCode={copyCode} copyLink={copyLink} share={share} viewUrl={mounted ? buildViewUrl() : ""} tab={settingsTab} setTab={setSettingsTab} selectedPid={selectedPid} onAutoIcons={autoIcons} />
                         </div>
                     </div>
                 )}
@@ -1693,8 +1724,8 @@ No explanation, no markdown, just the JSON object.`,
                         </div>
                         {/* Sheet content */}
                         <div className="flex-1 overflow-y-auto" style={{ padding: "20px 20px 40px" }}>
-                            <SettingsContent opts={opts} layout={layout} copied={copied} copiedLink={copiedLink} copiedImage={copiedImage} copiedShare={copiedShare} mobile={true} participants={diagram.participants} isSequence={isSequence}
-                                upd={upd} updL={updL} exportPng={exportPng} exportSvg={exportSvg} copyImage={copyImage} exportCode={exportCode} exportJson={exportJson} copyCode={copyCode} copyLink={copyLink} share={share} viewUrl={mounted ? buildViewUrl() : ""} tab={settingsTab} setTab={setSettingsTab} selectedPid={selectedPid} onAutoIcons={autoIcons} />
+                            <SettingsContent opts={opts} layout={layout} copied={copied} copiedLink={copiedLink} copiedSvg={copiedSvg} copiedShare={copiedShare} mobile={true} participants={diagram.participants} isSequence={isSequence}
+                                upd={upd} updL={updL} exportPng={exportPng} exportSvg={exportSvg} copySvg={copySvg} exportCode={exportCode} exportJson={exportJson} copyCode={copyCode} copyLink={copyLink} share={share} viewUrl={mounted ? buildViewUrl() : ""} tab={settingsTab} setTab={setSettingsTab} selectedPid={selectedPid} onAutoIcons={autoIcons} />
                         </div>
                     </div>
                 </div>
