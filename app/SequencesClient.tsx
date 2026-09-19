@@ -24,8 +24,33 @@ type Sequence = {
 // ── Shared (public) ───────────────────────────────────────────────────────────
 const LS_SHARED = "sequence:shared";
 const LS_VIEW = "sequence:view"; // "list" (default) | "grid"
+
+// These keys were renamed with the app (diagram* -> sequence*). A browser that
+// used the app before the rename still holds its values under the old names, so
+// read through to them once and migrate the value forward. Without this the
+// rename silently wipes the cached Google avatar, the shared set, and the saved
+// view mode - the avatar cache being the one that restored the header photo.
+const LEGACY_LS: Record<string, string> = {
+  [LS_SHARED]: "diagram:shared",
+  [LS_VIEW]: "diagram:view",
+  sequences_user_cache: "diagrams_user_cache",
+};
+
+function lsGet(key: string): string | null {
+  try {
+    const v = localStorage.getItem(key);
+    if (v !== null) return v;
+    const legacy = LEGACY_LS[key] ? localStorage.getItem(LEGACY_LS[key]) : null;
+    if (legacy !== null) {
+      localStorage.setItem(key, legacy);
+      localStorage.removeItem(LEGACY_LS[key]);
+      return legacy;
+    }
+  } catch { /* storage blocked (private mode) - treat as empty */ }
+  return null;
+}
 function loadShared(): Set<string> {
-  try { return new Set(JSON.parse(localStorage.getItem(LS_SHARED) ?? "[]")); } catch { return new Set(); }
+  try { return new Set(JSON.parse(lsGet(LS_SHARED) ?? "[]")); } catch { return new Set(); }
 }
 
 // ── Sequence minimap ───────────────────────────────────────────────────────────
@@ -879,7 +904,7 @@ export default function SequencesClient({ user, sequences: initial }: { user: Sh
   // View mode: "list" (default) vs "grid" thumbnails. Persisted per browser.
   const [view, setView] = useState<"list" | "grid">(() => {
     if (typeof window === "undefined") return "list";
-    return localStorage.getItem(LS_VIEW) === "grid" ? "grid" : "list";
+    return lsGet(LS_VIEW) === "grid" ? "grid" : "list";
   });
   const changeView = (v: "list" | "grid") => { setView(v); try { localStorage.setItem(LS_VIEW, v); } catch {} };
   const menuRef = useRef<HTMLDivElement>(null);
@@ -900,10 +925,8 @@ export default function SequencesClient({ user, sequences: initial }: { user: Sh
       try { localStorage.setItem(LS_KEY, liveUrl); } catch {}
       return;
     }
-    try {
-      const cached = localStorage.getItem(LS_KEY);
-      if (cached) setAvatarSrc(cached);
-    } catch {}
+    const cached = lsGet(LS_KEY);
+    if (cached) setAvatarSrc(cached);
   }, [user]);
 
   useEffect(() => {

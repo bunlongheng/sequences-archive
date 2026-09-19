@@ -29,9 +29,12 @@ export default function SequencesShell({ initial }: { initial?: { user: ShellUse
         // bypass); 401 otherwise. Avoids relying on getSession() alone, which
         // is null on localhost where there is no real session.
         // Both awaits are independent, so run them concurrently.
-        const [res, session] = await Promise.all([
+        const [res, session, me] = await Promise.all([
           fetch("/api/sequences"),
           getSession().catch(() => null),
+          // getSession() does not reliably carry the Google photo on this path,
+          // so ask the server, which reads it from the users table.
+          fetch("/api/auth/me").then((r) => r.json()).catch(() => null),
         ]);
         if (!res.ok) { if (!cancelled) { setUser(null); setReady(true); } return; }
 
@@ -40,10 +43,10 @@ export default function SequencesShell({ initial }: { initial?: { user: ShellUse
 
         if (Array.isArray(data)) setSequences(data);
         setUser({
-          email: session?.user?.email ?? "owner",
+          email: session?.user?.email ?? me?.profile?.email ?? "owner",
           user_metadata: {
-            full_name: session?.user?.name ?? undefined,
-            avatar_url: session?.user?.image ?? undefined,
+            full_name: session?.user?.name ?? me?.profile?.name ?? undefined,
+            avatar_url: session?.user?.image ?? me?.profile?.image ?? undefined,
           },
         });
       } catch {
