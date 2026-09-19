@@ -90,14 +90,14 @@ function IconBtn({ active, onClick, accent = "#0a84ff", inactiveBg = "#2a2a2c", 
 
 // ── Settings content (shared between desktop panel + mobile sheet) ─────────────
 export function SettingsContent({
-    opts, layout, copied, copiedLink, copiedShare, mobile = false, participants = [], isSequence = true,
-    upd, updL, exportPng, exportSvg, exportCode, exportJson, copyCode, copyLink, share, viewUrl, tab, setTab, selectedPid, onAutoIcons,
+    opts, layout, copied, copiedLink, copiedImage, copiedShare, mobile = false, participants = [], isSequence = true,
+    upd, updL, exportPng, exportSvg, copyImage, exportCode, exportJson, copyCode, copyLink, share, viewUrl, tab, setTab, selectedPid, onAutoIcons,
 }: {
-    opts: Opts; layout: Layout; copied: boolean; copiedLink: boolean; copiedShare: boolean;
+    opts: Opts; layout: Layout; copied: boolean; copiedLink: boolean; copiedImage: boolean; copiedShare: boolean;
     mobile?: boolean; participants?: Participant[]; isSequence?: boolean; viewUrl: string | null;
     upd: (p: Partial<Opts>) => void;
     updL: (p: Partial<Layout>) => void;
-    exportPng: () => void; exportSvg: () => void; exportCode: () => void; exportJson: () => void;
+    exportPng: () => void; exportSvg: () => void; copyImage: () => void; exportCode: () => void; exportJson: () => void;
     copyCode: () => void; copyLink: () => void; share: () => void;
     onAutoIcons?: () => void;
     tab: "general" | "components" | "share"; setTab: (t: "general" | "components" | "share") => void;
@@ -241,6 +241,11 @@ export function SettingsContent({
                             className="rounded-xl font-semibold transition-all hover:brightness-110 active:scale-95"
                             style={{ background: copiedLink ? "#A9DC76" : "#A9DC76", color: "#221F22", cursor: "pointer", padding: mobile ? "9px 0" : "7px 0", fontSize: fs(11) }}>
                             {copiedLink ? "Copied!" : "Link"}
+                        </button>
+                        <button onClick={copyImage} title="Copy the diagram as a high-resolution image, ready to paste"
+                            className="rounded-xl font-semibold transition-all hover:brightness-110 active:scale-95"
+                            style={{ background: copiedImage ? "#A9DC76" : "#FFD866", color: "#221F22", cursor: "pointer", padding: mobile ? "9px 0" : "7px 0", fontSize: fs(11) }}>
+                            {copiedImage ? "Copied!" : "Copy"}
                         </button>
                         {/* Row 3 */}
                         <button onClick={share}

@@ -62,6 +62,7 @@ export default function SequenceEditor() {
     const [codeWidth, setCodeWidth] = useState(340);
     const [copied, setCopied] = useState(false);
     const [copiedLink, setCopiedLink] = useState(false);
+    const [copiedImage, setCopiedImage] = useState(false);
     const [copiedShare, setCopiedShare] = useState(false);
     const [diagramLoading, setDiagramLoading] = useState(false);
     const [hasFit, setHasFit] = useState(false);
@@ -622,22 +623,68 @@ export default function SequenceEditor() {
         return `${title}-${date}-${time}.${ext}`;
     };
 
+    // Rasterizes the current SVG to a PNG blob at `scale`.
+    //
+    // The SVG is handed to the <img> as a data: URL, NOT a blob: URL. The CSP
+    // is `img-src 'self' data: https:` - no blob: - so an object URL is refused
+    // outright ("violates the following Content Security Policy directive") and
+    // the image never loads. data: is already allowed, so this needs no CSP
+    // change. Getting this wrong fails silently: onload never fires.
+    const rasterize = useCallback((svgStr: string, scale: number): Promise<Blob> => {
+        const dataUrl = `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svgStr)}`;
+        return new Promise((resolve, reject) => {
+            const img = new Image();
+            img.onload = () => {
+                const c = document.createElement("canvas");
+                c.width = img.width * scale; c.height = img.height * scale;
+                const ctx = c.getContext("2d");
+                if (!ctx) { reject(new Error("no 2d context")); return; }
+                ctx.scale(scale, scale);
+                ctx.fillStyle = THEMES[opts.theme]?.bg ?? "#ffffff";
+                ctx.fillRect(0, 0, img.width, img.height);
+                ctx.drawImage(img, 0, 0);
+                c.toBlob(b => (b ? resolve(b) : reject(new Error("toBlob returned null"))), "image/png");
+            };
+            img.onerror = () => reject(new Error("could not rasterize the SVG"));
+            img.src = dataUrl;
+        });
+    }, [opts]);
+
     const exportPng = useCallback(() => {
         const svgStr = activeSvg;
         if (!svgStr) return;
-        const url = URL.createObjectURL(new Blob([svgStr], { type: "image/svg+xml" }));
-        const img = new Image();
-        img.onload = () => {
-            const c = document.createElement("canvas");
-            c.width = img.width * 2; c.height = img.height * 2;
-            const ctx = c.getContext("2d")!;
-            ctx.scale(2, 2); ctx.fillStyle = THEMES[opts.theme]?.bg ?? "#ffffff"; ctx.fillRect(0, 0, img.width, img.height);
-            ctx.drawImage(img, 0, 0);
-            c.toBlob(b => { if (!b) return; const a = document.createElement("a"); a.href = URL.createObjectURL(b); a.download = exportFilename("png"); a.click(); });
-            URL.revokeObjectURL(url);
-        };
-        img.src = url;
-    }, [activeSvg, opts]);
+        rasterize(svgStr, 2)
+            .then(b => {
+                const a = document.createElement("a");
+                const url = URL.createObjectURL(b);
+                a.href = url; a.download = exportFilename("png"); a.click();
+                URL.revokeObjectURL(url);
+            })
+            .catch(() => showToast("Could not render the PNG", { color: "#ef4444" }));
+    }, [activeSvg, rasterize]);
+
+    // Puts the rendered diagram on the clipboard as a high-resolution PNG so it
+    // can be pasted straight into Slack, Docs, Keynote or a ticket. Rasterized
+    // at 3x (the PNG download uses 2x) so it stays sharp on a retina screen and
+    // when a slide scales it up. PNG rather than the SVG markup on purpose:
+    // browsers only accept image/png as an image on the clipboard, and apps
+    // that also see text/plain paste the markup as text instead of the picture.
+    // The Code button already copies the source for that case.
+    const copyImage = useCallback(() => {
+        const svgStr = activeSvg;
+        if (!svgStr) { showToast("Paste a diagram first", { color: "#f59e0b" }); return; }
+
+        if (typeof ClipboardItem === "undefined" || !navigator.clipboard?.write) {
+            showToast("Clipboard images are not supported here - use PNG", { color: "#f59e0b" });
+            return;
+        }
+        // ClipboardItem has to be constructed inside the click itself (Safari
+        // drops the user gesture across an await), so hand it the pending
+        // promise rather than resolving the blob first.
+        navigator.clipboard.write([new ClipboardItem({ "image/png": rasterize(svgStr, 3) })])
+            .then(() => { setCopiedImage(true); setTimeout(() => setCopiedImage(false), 1500); })
+            .catch(() => showToast("Copy failed - use the PNG download", { color: "#ef4444" }));
+    }, [activeSvg, rasterize]);
 
     const exportCode = useCallback(() => {
         const a = document.createElement("a");
@@ -1567,8 +1614,8 @@ No explanation, no markdown, just the JSON object.`,
                 {!isMobile && showSettings && (
                     <div className="shrink-0 flex flex-col" style={{ width: 268, background: ut.panelBg, borderLeft: `1px solid ${ut.panelBorder}` }}>
                             <div className="flex-1 overflow-y-auto" style={{ padding: "12px 12px" }}>
-                            <SettingsContent opts={opts} layout={computedLayout} copied={copied} copiedLink={copiedLink} copiedShare={copiedShare} participants={diagram.participants} isSequence={isSequence}
-                                upd={upd} updL={updL} exportPng={exportPng} exportSvg={exportSvg} exportCode={exportCode} exportJson={exportJson} copyCode={copyCode} copyLink={copyLink} share={share} viewUrl={mounted ? buildViewUrl() : ""} tab={settingsTab} setTab={setSettingsTab} selectedPid={selectedPid} onAutoIcons={autoIcons} />
+                            <SettingsContent opts={opts} layout={computedLayout} copied={copied} copiedLink={copiedLink} copiedImage={copiedImage} copiedShare={copiedShare} participants={diagram.participants} isSequence={isSequence}
+                                upd={upd} updL={updL} exportPng={exportPng} exportSvg={exportSvg} copyImage={copyImage} exportCode={exportCode} exportJson={exportJson} copyCode={copyCode} copyLink={copyLink} share={share} viewUrl={mounted ? buildViewUrl() : ""} tab={settingsTab} setTab={setSettingsTab} selectedPid={selectedPid} onAutoIcons={autoIcons} />
                         </div>
                     </div>
                 )}
@@ -1646,8 +1693,8 @@ No explanation, no markdown, just the JSON object.`,
                         </div>
                         {/* Sheet content */}
                         <div className="flex-1 overflow-y-auto" style={{ padding: "20px 20px 40px" }}>
-                            <SettingsContent opts={opts} layout={layout} copied={copied} copiedLink={copiedLink} copiedShare={copiedShare} mobile={true} participants={diagram.participants} isSequence={isSequence}
-                                upd={upd} updL={updL} exportPng={exportPng} exportSvg={exportSvg} exportCode={exportCode} exportJson={exportJson} copyCode={copyCode} copyLink={copyLink} share={share} viewUrl={mounted ? buildViewUrl() : ""} tab={settingsTab} setTab={setSettingsTab} selectedPid={selectedPid} onAutoIcons={autoIcons} />
+                            <SettingsContent opts={opts} layout={layout} copied={copied} copiedLink={copiedLink} copiedImage={copiedImage} copiedShare={copiedShare} mobile={true} participants={diagram.participants} isSequence={isSequence}
+                                upd={upd} updL={updL} exportPng={exportPng} exportSvg={exportSvg} copyImage={copyImage} exportCode={exportCode} exportJson={exportJson} copyCode={copyCode} copyLink={copyLink} share={share} viewUrl={mounted ? buildViewUrl() : ""} tab={settingsTab} setTab={setSettingsTab} selectedPid={selectedPid} onAutoIcons={autoIcons} />
                         </div>
                     </div>
                 </div>
