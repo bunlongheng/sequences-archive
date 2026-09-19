@@ -50,6 +50,16 @@ test.describe("Share panel - Copy", () => {
     expect(Number(m![1])).toBeCloseTo(Number(m![3]), 1);
     expect(Number(m![2])).toBeCloseTo(Number(m![4]), 1);
 
+    // Contract with the Forensic board (~/Sites/forensic), which is where this
+    // gets pasted. Its handler tries FILES on the clipboard first and only then
+    // SVG markup, so the copy must carry text/plain ONLY - adding an image/png
+    // alongside would make Forensic take the raster branch instead. This is
+    // Forensic's exact SVG_TEXT matcher from src/hooks/useNodeClipboard.js; if
+    // it stops matching, the paste silently degrades to "not a picture".
+    const FORENSIC_SVG_TEXT =
+      /^\s*(?:<\?xml[^>]*>\s*)?(?:<!DOCTYPE[^>]*>\s*)?<svg[\s>][\s\S]*<\/svg>\s*$/i;
+    expect(FORENSIC_SVG_TEXT.test(text), "matches Forensic's svgTextToFile matcher").toBe(true);
+
     const parsesAsSvg = await page.evaluate((t) => {
       const d = new DOMParser().parseFromString(t, "image/svg+xml");
       return !d.querySelector("parsererror") && d.documentElement.tagName === "svg";
