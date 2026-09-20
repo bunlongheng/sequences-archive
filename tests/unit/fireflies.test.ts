@@ -1,5 +1,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { fireflies } from "@/app/fireflies";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 
 // fireflies() is pure DOM work, so it is tested here rather than through the UI -
 // driving it end to end would mean deleting a real row from the shared database.
@@ -76,5 +78,33 @@ describe("fireflies", () => {
     mockReducedMotion(true);
     fireflies(cardAt(0, 0, 260, 180));
     expect(document.querySelector(".ff-field")).toBeNull();
+  });
+});
+
+// The swarm is only ever as good as its anchor. deleteDiagram() locates the
+// element to scatter with [data-seq-id], and fireflies() returns silently when
+// that lookup misses - which is exactly how the list view shipped without the
+// effect while every test above still passed. Both of the things a user can
+// delete from must carry the hook, so assert it at the source.
+describe("the delete hook both views must carry", () => {
+  const src = readFileSync(join(process.cwd(), "app/SequencesClient.tsx"), "utf8");
+
+  // Take each component's body as the text from its declaration up to the next
+  // top-level `function`, which is how this file separates its components.
+  const bodyOf = (name: string) => {
+    const start = src.indexOf(`function ${name}(`);
+    expect(start, `${name} not found`).toBeGreaterThan(-1);
+    const next = src.indexOf("\nfunction ", start + 1);
+    return src.slice(start, next === -1 ? undefined : next);
+  };
+
+  for (const name of ["SequenceCard", "DiagramRow"]) {
+    it(`${name} renders data-seq-id so a delete can find it`, () => {
+      expect(bodyOf(name)).toContain("data-seq-id={d.id}");
+    });
+  }
+
+  it("deleteDiagram looks the element up by that attribute", () => {
+    expect(src).toContain('fireflies(document.querySelector(`[data-seq-id="${id}"]`))');
   });
 });
