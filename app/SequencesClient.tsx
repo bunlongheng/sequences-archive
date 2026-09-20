@@ -6,6 +6,7 @@ import { CuteToast, showToast } from "@/app/CuteToast";
 import { Bot, Plug, Briefcase, User as UserIcon, FlaskConical, Clipboard, GraduationCap, Lightbulb, Rocket, Star, Heart, Tag, Youtube } from "lucide-react";
 import { relativeTime, buildTagColorMap, TAG_PALETTE } from "@/lib/editor-logic";
 import { PAL, stripFrontmatter, detectSequenceType } from "@/lib/svg-renderer";
+import { fireflies } from "./fireflies";
 
 // Shape the shell passes in: NextAuth session user mapped to the fields this
 // component reads.
@@ -737,6 +738,7 @@ function SequenceCard({ d, isShared, onOpen, onDelete, onRename, onTag, onViewCo
       tabIndex={0}
       role="button"
       aria-label={`Open sequence ${d.title}`}
+      data-seq-id={d.id}
       className={`dc-card${isNew ? " dc-new-card" : ""}`}
       style={{
         background: "#ffffff",
@@ -834,6 +836,7 @@ function DiagramRow({ d, isShared, onOpen, onDelete, onRename, onTag, onViewCode
   return (
     <div onClick={onOpen} onMouseEnter={() => setHovered(true)} onMouseLeave={() => setHovered(false)}
       role="button" tabIndex={0} aria-label={`Open ${d.title}`}
+      data-seq-id={d.id}
       onKeyDown={e => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); onOpen(); } }}
       style={{ display: "flex", alignItems: "center", gap: 12, padding: "9px 14px", borderBottom: "1px solid #eef0f2", cursor: "pointer", background: hovered ? "#f7f8fa" : (isNew ? "#f5f3ff" : "#ffffff"), transition: "background 0.1s" }}>
       {/* Dynamic letter tile - first letter, colored by title */}
@@ -1022,6 +1025,10 @@ export default function SequencesClient({ user, sequences: initial }: { user: Sh
       setDeleting(null); return;
     }
     showToast("Deleted ✓", { color: "#64748b" });
+    // Read the card's box BEFORE React drops it from the list, then let the
+    // fireflies take its place - once it is unmounted there is nothing to
+    // measure and the swarm would land in the top-left corner.
+    fireflies(document.querySelector(`[data-seq-id="${id}"]`));
     setSequences(prev => prev.filter(d => d.id !== id));
     setDeleting(null);
   }
