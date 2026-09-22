@@ -46,7 +46,7 @@ export default function LandingDemo({ sequences }: { sequences: Demo[] }) {
               <span>Beautiful</span>
               <span>Clean</span>
               <span>Elegant</span>
-            </span>{" "}Sequences
+            </span>{" "}Sequence Diagrams
           </h1>
           <p style={{ fontSize: 14, color: "#64748b", margin: "8px auto 0", maxWidth: 720, lineHeight: 1.45 }}>
             AI-friendly and AI-integrated - agents create these via MCP or plain English.
@@ -69,7 +69,7 @@ export default function LandingDemo({ sequences }: { sequences: Demo[] }) {
             {demos.map((d, i) => (
               <a key={d.id} href={`/d/${d.id}`} className="ld-card" style={{
                 display: "flex", flexDirection: "column", background: "#fff",
-                border: "1px solid #e6e8ee", borderRadius: 16, overflow: "hidden",
+                border: "1px solid #e6e8ee", overflow: "hidden",
                 textDecoration: "none", boxShadow: "0 1px 4px rgba(15,23,42,0.05)",
                 animationDelay: `${0.05 * i}s`,
               }}>

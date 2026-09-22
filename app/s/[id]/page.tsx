@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { cache } from "react";
 import { headers } from "next/headers";
+import Wordmark from "@/app/Wordmark";
 import { notFound } from "next/navigation";
 import db from "@/lib/db";
 import { parse, buildSvg, DEFAULT_OPTS, DEFAULT_LAYOUT } from "@/lib/svg-renderer";
@@ -60,13 +61,11 @@ export default async function DiagramPage({ params }: { params: Promise<{ id: st
         padding: "0 20px", background: "#fff", borderBottom: "1px solid #e5e7eb",
         position: "sticky", top: 0, zIndex: 10,
       }}>
-        <a href="/demo" style={{ display: "flex", alignItems: "center", gap: 8, textDecoration: "none" }}>
-          <span style={{ display: "flex", gap: 4 }}>
-            <span style={{ width: 16, height: 10, background: "#ef4444", borderRadius: 2 }} />
-            <span style={{ width: 16, height: 10, background: "#eab308", borderRadius: 2 }} />
-            <span style={{ width: 16, height: 10, background: "#22c55e", borderRadius: 2 }} />
-          </span>
-          <span style={{ fontSize: 15, fontWeight: 800, letterSpacing: "-0.01em", color: "#111827" }}>Sequences</span>
+        <a href="/demo" style={{ display: "flex", alignItems: "center", textDecoration: "none" }}>
+          {/* The app's own mark. This bar used to hand-draw 3 coloured
+              rectangles, which is not the logo - the icon is 3 lifelines with
+              messages crossing them. */}
+          <Wordmark size={28} />
         </a>
         <a href={`/svg/${id}`} style={{ fontSize: 13, fontWeight: 600, color: "#4b5563", textDecoration: "none" }}>Download SVG</a>
       </header>
@@ -78,7 +77,7 @@ export default async function DiagramPage({ params }: { params: Promise<{ id: st
         <style>{`.dgview svg { max-width: 100%; height: auto; display: block; margin: 0 auto; }`}</style>
         <div
           className="dgview"
-          style={{ background: "#fff", borderRadius: 16, border: "1px solid #e5e7eb", padding: "24px", boxShadow: "0 1px 3px rgba(15,23,42,0.06)", overflow: "hidden" }}
+          style={{ background: "#fff", border: "1px solid #e5e7eb", padding: "24px", boxShadow: "0 1px 3px rgba(15,23,42,0.06)", overflow: "hidden" }}
           dangerouslySetInnerHTML={{ __html: svg }}
         />
         <SocialFooter />
