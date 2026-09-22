@@ -2,6 +2,7 @@ import { describe, it, expect } from "vitest";
 import {
   esc,
   guessIconKey,
+  assignIconKeys,
   renderIcon,
   detectSequenceType,
   stripFrontmatter,
@@ -93,8 +94,20 @@ describe("guessIconKey", () => {
   it("database: matches 'sql'", () => expect(guessIconKey("sql")).toBe("database"));
   it("database: matches 'mongo'", () => expect(guessIconKey("mongo")).toBe("database"));
 
-  // 'memory' contains 'me' which hits the user branch first via /user|client|person|human|customer|visitor|me/
+  it("brain: 'memory' is a brain, not a person (whole words, not substrings)", () => expect(guessIconKey("memory")).toBe("brain"));
   it("brain: 'knowledge' returns brain", () => expect(guessIconKey("knowledge")).toBe("brain"));
+  it("whole words: 'shadow' is not a shell, 'email' is not a bot, 'login' is not a log", () => {
+    expect(guessIconKey("Closed shadow root")).toBe("layers");
+    expect(guessIconKey("email")).toBe("mail");
+    expect(guessIconKey("login")).toBe("lock");
+  });
+  it("user: 'You' is always a person", () => expect(guessIconKey("You")).toBe("user"));
+  it("chrome: a browser toolbar gets the chrome icon", () => expect(guessIconKey("Chrome toolbar")).toBe("chrome"));
+  it("file-code: a filename gets the file icon", () => {
+    expect(guessIconKey("background.js")).toBe("file-code");
+    expect(guessIconKey("worker.py")).toBe("file-code");
+  });
+  it("link: a page gets the link icon", () => expect(guessIconKey("Page (activeTab)")).toBe("link"));
   it("brain: 'context' returns brain", () => expect(guessIconKey("context")).toBe("brain"));
 
   it("zap: matches 'cache'", () => expect(guessIconKey("cache")).toBe("zap"));
@@ -786,5 +799,50 @@ describe("ICON_NODES", () => {
         expect(typeof props).toBe("object");
       });
     });
+  });
+});
+
+// ---------------------------------------------------------------------------
+// assignIconKeys() - one icon per participant, never a repeat
+// ---------------------------------------------------------------------------
+describe("assignIconKeys", () => {
+  const P = (id: string, label: string) => ({ id, label });
+
+  it("never gives 2 participants the same icon", () => {
+    const keys = assignIconKeys([P("Y", "You"), P("T", "Chrome toolbar"), P("B", "background.js"), P("P", "Page (activeTab)"), P("O", "overlay.js"), P("S", "Closed shadow root")]);
+    expect(new Set(Object.values(keys)).size).toBe(6);
+    expect(keys).toMatchObject({ Y: "user", T: "chrome", B: "file-code", P: "link", O: "code", S: "layers" });
+  });
+
+  it("a second file takes its next-best candidate, not a copy", () => {
+    const keys = assignIconKeys([P("B", "background.js"), P("O", "overlay.js")]);
+    expect(keys.B).toBe("file-code");
+    expect(keys.O).toBe("code");
+  });
+
+  it("a first choice beats an earlier participant's runner-up", () => {
+    // overlay.js would take layers as its fallback; shadow root wants it outright
+    const keys = assignIconKeys([P("B", "background.js"), P("O", "overlay.js"), P("S", "Closed shadow root")]);
+    expect(keys.S).toBe("layers");
+    expect(keys.O).toBe("code");
+  });
+
+  it("2 people: the first is the person, the second is something else", () => {
+    const keys = assignIconKeys([P("A", "Customer"), P("B", "User")]);
+    expect(keys.A).toBe("user");
+    expect(keys.B).not.toBe("user");
+  });
+
+  it("explicit picks are honored and reserved before any auto pick", () => {
+    const keys = assignIconKeys([P("A", "Foo"), P("B", "Bar")], { B: "package" });
+    expect(keys.B).toBe("package");
+    expect(keys.A).not.toBe("package");
+  });
+
+  it("an unrecognized label never falls back to a person or a robot", () => {
+    const keys = assignIconKeys(Array.from({ length: 12 }, (_, i) => P(`p${i}`, `Thing ${i}`)));
+    expect(Object.values(keys)).not.toContain("user");
+    expect(Object.values(keys)).not.toContain("bot");
+    expect(new Set(Object.values(keys)).size).toBe(12);
   });
 });
