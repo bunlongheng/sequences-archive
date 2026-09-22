@@ -4,6 +4,7 @@ import db from "@/lib/db";
 import { uniqueSequenceSlug } from "@/lib/slugs";
 import { embedTitleInCode } from "@/lib/sequence-code";
 import { parse, buildSvg, DEFAULT_OPTS, DEFAULT_LAYOUT } from "@/lib/svg-renderer";
+import { requestOrigin, logApiRequest } from "@/lib/api-log";
 import type { Opts, Layout } from "@/lib/svg-renderer";
 
 /**
@@ -40,16 +41,33 @@ import type { Opts, Layout } from "@/lib/svg-renderer";
  * "svg_error" carries the message instead of "svg".
  */
 export async function POST(req: NextRequest) {
+  // Every programmatic call is logged with its provenance - authorized or not -
+  // so traffic can be attributed to a caller and throttled later if one runs
+  // away. The log write never changes the response.
+  const ctx: CreateCtx = { sequenceId: null, title: null };
+  let res: NextResponse;
   try {
-  return await postHandler(req);
+    res = await postHandler(req, ctx);
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : String(err);
     console.error("[ai/sequences] unhandled error:", msg);
-    return NextResponse.json({ error: "Internal error" }, { status: 500 });
+    res = NextResponse.json({ error: "Internal error" }, { status: 500 });
   }
+  await logApiRequest({
+    ...requestOrigin(req),
+    route: "/api/ai/sequences",
+    status: res.status,
+    sequenceId: ctx.sequenceId,
+    title: ctx.title,
+  });
+  return res;
 }
 
-async function postHandler(req: NextRequest) {
+// Carries the created row back out of postHandler for the audit log without
+// rewriting its dozen early returns.
+type CreateCtx = { sequenceId: string | null; title: string | null };
+
+async function postHandler(req: NextRequest, ctx: CreateCtx) {
   // ── Auth ──────────────────────────────────────────────────────────────────
   if (!process.env.SEQUENCES_API_SECRET && !process.env.SEQUENCES_API_SECRET_PARTNER && !process.env.DIAGRAMS_API_SECRET && !process.env.DIAGRAMS_API_SECRET_PARTNER && !process.env.AI_API_SECRET && !process.env.AI_API_SECRET_PARTNER) {
     return NextResponse.json({ error: "SEQUENCES_API_SECRET not configured" }, { status: 500 });
@@ -171,6 +189,8 @@ async function postHandler(req: NextRequest) {
 
   if (rows.length === 0) return NextResponse.json({ error: "Insert failed" }, { status: 500 });
   const diagram = rows[0];
+  ctx.sequenceId = diagram.id;
+  ctx.title = diagram.title;
 
   const baseUrl = process.env.NEXT_PUBLIC_APP_URL ?? "https://sequences-bheng.vercel.app";
   const response: { id: string; url: string; svg_url: string; svg?: string; svg_error?: string } = {

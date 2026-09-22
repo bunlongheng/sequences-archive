@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import db from "@/lib/db";
 import { uniqueSequenceSlug } from "@/lib/slugs";
 import { resolveOwnerId } from "@/lib/auth-owner";
+import { requestOrigin, logApiRequest } from "@/lib/api-log";
 
 // Accepts a bare 11-char video ID or any YouTube URL (watch?v=, youtu.be/,
 // /shorts/, /embed/) and returns the canonical video ID, else null.
@@ -64,6 +65,18 @@ export async function POST(req: NextRequest) {
     );
 
     if (rowCount === 0) return NextResponse.json({ error: "Insert failed" }, { status: 500 });
+
+    // Programmatic callers get their provenance logged; the owner's own UI saves
+    // do not, so the log stays a record of API traffic rather than of editing.
+    if (isApiCall) {
+      await logApiRequest({
+        ...requestOrigin(req),
+        route: "/api/sequences",
+        status: 200,
+        sequenceId: rows[0].id,
+        title: rows[0].title,
+      });
+    }
     return NextResponse.json(rows[0]);
   } catch (err: unknown) {
     console.error("[sequences] POST error:", err instanceof Error ? err.message : String(err));
