@@ -334,29 +334,34 @@ export function SettingsContent({
                 {/* Box Overlay */}
                 <div>
                     <div style={{ fontSize: fs(9), fontWeight: 700, color: ut.sectionLabel, textTransform: "uppercase", letterSpacing: "0.1em", marginBottom: 6 }}>Overlay</div>
-                    <div style={{ display: "grid", gridTemplateColumns: "repeat(5, 1fr)", gap: 5 }}>
+                    {/* Graphite, not blue. The overlay is a texture drawn over a
+                        participant box in whatever colour that participant has,
+                        so a coloured swatch says nothing about the choice and 5
+                        of them in a row read as one blue wall. On a neutral chip
+                        the texture itself is the difference, and the accent is
+                        left to mean exactly one thing: what is selected. */}
+                    <div style={{ display: "grid", gridTemplateColumns: "repeat(5, 1fr)", gap: 6 }}>
                         {([
                             ["none",  "None",  ""],
-                            ["gloss", "Gloss", "linear-gradient(to bottom, rgba(255,255,255,0.32) 0%, rgba(255,255,255,0.32) 55%, transparent 55%)"],
-                            ["hatch", "Hatch", "repeating-linear-gradient(45deg, rgba(255,255,255,0.3) 0px, rgba(255,255,255,0.3) 1px, transparent 1px, transparent 9px)"],
+                            ["gloss", "Gloss", "linear-gradient(to bottom, rgba(255,255,255,0.34) 0%, rgba(255,255,255,0.34) 55%, transparent 55%)"],
+                            ["hatch", "Hatch", "repeating-linear-gradient(45deg, rgba(255,255,255,0.32) 0px, rgba(255,255,255,0.32) 1px, transparent 1px, transparent 9px)"],
                             ["dots",  "Dots",  ""],
-                            ["pulse", "Pulse", "radial-gradient(circle at 50% 50%, transparent 18%, rgba(255,255,255,0.28) 19%, rgba(255,255,255,0.28) 21%, transparent 22%, transparent 36%, rgba(255,255,255,0.28) 37%, rgba(255,255,255,0.28) 39%, transparent 40%)"],
+                            ["pulse", "Pulse", "radial-gradient(circle at 50% 50%, transparent 18%, rgba(255,255,255,0.3) 19%, rgba(255,255,255,0.3) 21%, transparent 22%, transparent 36%, rgba(255,255,255,0.3) 37%, rgba(255,255,255,0.3) 39%, transparent 40%)"],
                         ] as const).map(([v, label, overlay]) => {
                             const active = opts.boxOverlay === v;
                             return (
-                                <button key={v} onClick={() => upd({ boxOverlay: v })} style={{
-                                    padding: 0, borderRadius: 8, border: active ? "1.5px solid #3b82f6" : "1.5px solid transparent",
-                                    background: "transparent", cursor: "pointer", display: "flex", flexDirection: "column", alignItems: "center", gap: 4, overflow: "hidden",
-                                }}>
-                                    {/* Swatch */}
-                                    <div style={{ width: "100%", height: 32, borderRadius: 6, background: "#4f8ef7", position: "relative", overflow: "hidden", flexShrink: 0 }}>
+                                <button key={v} className="sq-theme" onClick={() => upd({ boxOverlay: v })}
+                                    aria-label={`${label} overlay`} aria-pressed={active} title={label}>
+                                    <div className="sq-theme-frame" style={{
+                                        height: 34, borderRadius: 8, position: "relative", overflow: "hidden",
+                                        background: "linear-gradient(160deg, #5b6675 0%, #3f4855 100%)",
+                                        boxShadow: active ? `0 0 0 2px ${ut.accent}, 0 3px 10px ${ut.accent}33` : `0 0 0 1px ${ut.panelBorder}`,
+                                    }}>
                                         {v === "dots"
-                                            ? <div style={{ position: "absolute", inset: 0, backgroundImage: "radial-gradient(circle, rgba(255,255,255,0.35) 1.5px, transparent 1.5px)", backgroundSize: "7px 7px" }} />
-                                            : overlay && <div style={{ position: "absolute", inset: 0, background: overlay }} />
-                                        }
+                                            ? <div style={{ position: "absolute", inset: 0, backgroundImage: "radial-gradient(circle, rgba(255,255,255,0.4) 1.5px, transparent 1.5px)", backgroundSize: "7px 7px" }} />
+                                            : overlay && <div style={{ position: "absolute", inset: 0, background: overlay }} />}
                                     </div>
-                                    {/* Label */}
-                                    <span style={{ fontSize: fs(9), fontWeight: 700, color: active ? ut.accent : ut.inactiveTabText, letterSpacing: "0.02em", paddingBottom: 3 }}>{label}</span>
+                                    <span style={{ display: "block", marginTop: 5, fontSize: fs(9), fontWeight: 700, color: active ? ut.accent : ut.inactiveTabText, letterSpacing: "0.02em", transition: "color 0.15s" }}>{label}</span>
                                 </button>
                             );
                         })}
@@ -365,18 +370,25 @@ export function SettingsContent({
 
                 {/* Icon mode 3-way selector */}
                 <div style={{ height: 1, background: ut.divider }} />
-                <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-                    <span style={{ fontSize: fs(11), color: ut.bodyText, fontWeight: 400 }}>Icons</span>
-                    <div style={{ display: "flex", gap: 4 }}>
-                        {(["none", "icons", "emoji"] as const).map(mode => (
-                            <button key={mode} onClick={() => upd({ iconMode: mode })} style={{
-                                flex: 1, padding: "3px 0", fontSize: fs(10), fontWeight: 600,
-                                borderRadius: 6, border: "none", cursor: "pointer",
-                                background: opts.iconMode === mode ? ut.toggleOn : ut.tabBarBg,
-                                color: opts.iconMode === mode ? "#fff" : ut.bodyText,
-                                textTransform: "capitalize", transition: "background 0.15s",
-                            }}>{mode}</button>
-                        ))}
+                {/* One segmented control, same shape as the tab bar above it -
+                    a raised white pill on a recessed track. It used to fill
+                    green, which made a 3rd accent colour in a panel that should
+                    only ever speak in 1. */}
+                <div style={{ display: "flex", flexDirection: "column", gap: 7 }}>
+                    <div style={{ fontSize: fs(9), fontWeight: 700, color: ut.sectionLabel, textTransform: "uppercase", letterSpacing: "0.1em" }}>Icon style</div>
+                    <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 3, background: ut.tabBarBg, borderRadius: 8, padding: 2 }}>
+                        {(["none", "icons", "emoji"] as const).map(mode => {
+                            const on = opts.iconMode === mode;
+                            return (
+                                <button key={mode} onClick={() => upd({ iconMode: mode })} aria-pressed={on} style={{
+                                    padding: "5px 0", fontSize: fs(10), fontWeight: 700, borderRadius: 6, border: "none", cursor: "pointer",
+                                    background: on ? ut.activeTab : "transparent",
+                                    color: on ? ut.activeTabText : ut.inactiveTabText,
+                                    boxShadow: on ? "0 1px 3px rgba(0,0,0,0.14)" : "none",
+                                    textTransform: "capitalize", transition: "all 0.15s",
+                                }}>{mode}</button>
+                            );
+                        })}
                     </div>
                 </div>
 
@@ -387,8 +399,8 @@ export function SettingsContent({
                         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 6 }}>
                             <span style={{ fontSize: fs(9), fontWeight: 700, color: ut.sectionLabel, textTransform: "uppercase", letterSpacing: "0.1em" }}>Icons</span>
                             {onAutoIcons && <button onClick={onAutoIcons} style={{
-                                fontSize: fs(9), fontWeight: 600, color: "#3b82f6", background: "rgba(59,130,246,0.1)",
-                                border: "1px solid rgba(59,130,246,0.2)", borderRadius: 6, padding: "2px 8px",
+                                fontSize: fs(9), fontWeight: 700, letterSpacing: "0.03em", color: ut.accent,
+                                background: "transparent", border: `1px solid ${ut.accent}40`, borderRadius: 999, padding: "2px 10px",
                                 cursor: "pointer", transition: "all 0.15s",
                             }}>Auto</button>}
                         </div>
