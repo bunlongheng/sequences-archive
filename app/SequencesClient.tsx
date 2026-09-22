@@ -1232,8 +1232,22 @@ export default function SequencesClient({ user, sequences: initial }: { user: Sh
         </div>
       </div></header>
 
-      {/* ── Tag filter bar ── Demo has no concept of tags, so the bar is not
-           rendered there at all rather than rendered empty. */}
+      {/* ── Demo bar ── Demo has no concept of tags, but the strip stays so the
+           content below keeps its vertical position when the scope changes. It
+           carries the one thing that is true there: the whole lineup, always. */}
+      {scope === "demo" && (
+        <div style={{ background: "#ffffff", borderBottom: "1px solid #e4e6e8", height: 40 }}>
+          <div className="dc-filterbar" style={{ maxWidth: 1600, margin: "0 auto", padding: "0 32px", height: "100%", boxSizing: "border-box" }}>
+            <div style={{ height: "100%", display: "flex", alignItems: "center", gap: 6 }}>
+              <span style={{ padding: "3px 12px", borderRadius: 20, fontSize: 11, fontWeight: 600, border: "1.5px solid #1c1e21", background: "#1c1e21", color: "#fff", flexShrink: 0, display: "flex", alignItems: "center", gap: 5 }}>
+                All <span style={{ background: "rgba(255,255,255,0.25)", borderRadius: 20, padding: "0 5px", fontSize: 10 }}>{demoSequences.length}</span>
+              </span>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Tag filter bar ── */}
       {scope === "personal" && allTags.length > 0 && (
         <div style={{ background: "#ffffff", borderBottom: "1px solid #e4e6e8", height: 40 }}>
         <div className="dc-filterbar" style={{ maxWidth: 1600, margin: "0 auto", padding: "0 32px", height: "100%", boxSizing: "border-box" }}>
