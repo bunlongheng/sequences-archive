@@ -62,8 +62,8 @@ function loadShared(): Set<string> {
 // swapped for 100% so the viewBox scales it to whatever width the card has,
 // letterboxed inside a 2:1 box on the theme's own background. Anything that is
 // not a sequenceDiagram, or fails to parse, keeps the sketch minimap.
-function SequencePreview({ d }: { d: Sequence }) {
-  const preview = useMemo(() => {
+function useSequenceSvg(d: Sequence) {
+  return useMemo(() => {
     if (detectSequenceType(d.code) !== "sequence") return null;
     try {
       const parsed = parse(d.code);
@@ -75,9 +75,30 @@ function SequencePreview({ d }: { d: Sequence }) {
       return { svg, bg: THEMES[opts.theme]?.bg ?? "#ffffff" };
     } catch { return null; }
   }, [d.code, d.title, d.settings, d.created_at]);
+}
+
+function SequencePreview({ d }: { d: Sequence }) {
+  const preview = useSequenceSvg(d);
   if (!preview) return <SequenceMinimap code={d.code} type={d.sequence_type} />;
   return (
     <div style={{ width: "100%", aspectRatio: "2 / 1", borderRadius: 8, overflow: "hidden", background: preview.bg, border: "1px solid #eceef0" }}
+      dangerouslySetInnerHTML={{ __html: preview.svg }} />
+  );
+}
+
+// Row thumbnail: the same render at tile size. Too small to read, but the shape
+// of a diagram is recognizable and it is the diagram, not a letter. A
+// non-sequence falls back to the coloured letter tile the rows always had.
+function SequenceRowThumb({ d }: { d: Sequence }) {
+  const preview = useSequenceSvg(d);
+  const c = colorFor(d.title || "");
+  if (!preview) return (
+    <div style={{ width: 92, height: 50, borderRadius: 8, background: tint(c, 0.14), border: `1px solid ${tint(c, 0.28)}`, color: c, fontSize: 14, fontWeight: 800, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+      {letterFor(d.title || "")}
+    </div>
+  );
+  return (
+    <div aria-hidden style={{ width: 92, height: 50, borderRadius: 8, overflow: "hidden", background: preview.bg, border: "1px solid #eceef0", flexShrink: 0 }}
       dangerouslySetInnerHTML={{ __html: preview.svg }} />
   );
 }
@@ -867,12 +888,8 @@ function DiagramRow({ d, isShared, onOpen, onDelete, onRename, onTag, onViewCode
       data-seq-id={d.id}
       onKeyDown={e => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); onOpen(); } }}
       style={{ display: "flex", alignItems: "center", gap: 12, padding: "9px 14px", borderBottom: "1px solid #eef0f2", cursor: "pointer", background: hovered ? "#f7f8fa" : (isNew ? "#f5f3ff" : "#ffffff"), transition: "background 0.1s" }}>
-      {/* Dynamic letter tile - first letter, colored by title */}
-      {(() => { const c = colorFor(d.title || ""); return (
-        <div style={{ width: 32, height: 32, borderRadius: 8, background: tint(c, 0.14), border: `1px solid ${tint(c, 0.28)}`, color: c, fontSize: 14, fontWeight: 800, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
-          {letterFor(d.title || "")}
-        </div>
-      ); })()}
+      {/* The diagram itself at tile size; a letter tile when it is not a sequence */}
+      <SequenceRowThumb d={d} />
       {/* Title + meta (tiered) */}
       <div style={{ minWidth: 0, flex: 1 }}>
         <div style={{ fontSize: 13.5, fontWeight: 600, color: "#1c1e21", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{d.title}</div>
