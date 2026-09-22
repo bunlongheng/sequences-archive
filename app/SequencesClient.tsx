@@ -79,7 +79,7 @@ function useSequenceSvg(d: Sequence) {
       if (!parsed.title && d.title) parsed.title = d.title;
       const opts: Opts = { ...DEFAULT_OPTS, ...(d.settings?.opts ?? {}), autoLayout: true };
       const layout: Layout = { ...DEFAULT_LAYOUT, ...(d.settings?.layout ?? {}) };
-      const svg = buildSvg(parsed, opts, layout, d.created_at, { interactive: false })
+      const svg = buildSvg(parsed, opts, layout, d.created_at, { interactive: false, titleBlock: false })
         .replace(/ width="[\d.]+" height="[\d.]+" viewBox=/, ' width="100%" height="100%" viewBox=');
       return { svg, bg: THEMES[opts.theme]?.bg ?? "#ffffff" };
     } catch { return null; }
@@ -784,13 +784,10 @@ function SequenceCard({ d, isShared, onOpen, onDelete, onRename, onTag, onViewCo
   onOpen: () => void; onDelete: () => void; onRename: () => void; onTag: () => void; onViewCode: () => void;
   deleting: boolean; tagColorMap: Map<string, typeof TAG_PALETTE[0]>; isNew: boolean; showTags: boolean;
 }) {
-  const [hovered, setHovered] = useState(false);
   const tags = d.tags ?? [];
 
   return (
     <div
-      onMouseEnter={() => setHovered(true)}
-      onMouseLeave={() => setHovered(false)}
       onClick={onOpen}
       onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); onOpen(); } }}
       tabIndex={0}
@@ -798,17 +795,21 @@ function SequenceCard({ d, isShared, onOpen, onDelete, onRename, onTag, onViewCo
       aria-label={`Open sequence ${d.title}`}
       data-seq-id={d.id}
       className={`dc-card${isNew ? " dc-new-card" : ""}`}
+      // Hover is CSS (.dc-card:hover), not React state. State could miss its
+      // mouseleave - a fast move between cards, or a re-render mid-hover - and
+      // leave a card stuck looking hovered while another one lit up too. The
+      // browser can only ever hover one element, so this cannot desync.
       style={{
         background: "#ffffff",
         borderRadius: 14,
         overflow: "hidden",
         cursor: "pointer",
-        transition: "box-shadow 0.15s, transform 0.15s",
-        border: isNew ? "2px solid #6366f1" : hovered ? "2px solid #1c1e21" : "2px solid transparent",
-        boxShadow: isNew ? "0 0 0 3px rgba(99,102,241,0.25), 0 8px 28px rgba(99,102,241,0.15)" : hovered ? "0 8px 28px rgba(0,0,0,0.18), 0 0 0 3px rgba(28,30,33,0.08)" : "0 1px 4px rgba(0,0,0,0.05)",
-        transform: hovered ? "translateY(-2px)" : "translateY(0)",
         position: "relative",
-        animation: isNew ? "dc-blink 0.4s ease-in-out 2" : undefined,
+        ...(isNew ? {
+          border: "2px solid #6366f1",
+          boxShadow: "0 0 0 3px rgba(99,102,241,0.25), 0 8px 28px rgba(99,102,241,0.15)",
+          animation: "dc-blink 0.4s ease-in-out 2",
+        } : null),
       }}
     >
       {/* Header */}
@@ -889,14 +890,13 @@ function DiagramRow({ d, isShared, onOpen, onDelete, onRename, onTag, onViewCode
   onOpen: () => void; onDelete: () => void; onRename: () => void; onTag: () => void; onViewCode: () => void;
   deleting: boolean; tagColorMap: Map<string, typeof TAG_PALETTE[0]>; isNew: boolean; showTags: boolean;
 }) {
-  const [hovered, setHovered] = useState(false);
   const tags = d.tags ?? [];
   return (
-    <div onClick={onOpen} onMouseEnter={() => setHovered(true)} onMouseLeave={() => setHovered(false)}
+    <div onClick={onOpen} className="dc-row"
       role="button" tabIndex={0} aria-label={`Open ${d.title}`}
       data-seq-id={d.id}
       onKeyDown={e => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); onOpen(); } }}
-      style={{ display: "flex", alignItems: "center", gap: 12, padding: "9px 14px", borderBottom: "1px solid #eef0f2", cursor: "pointer", background: hovered ? "#f7f8fa" : (isNew ? "#f5f3ff" : "#ffffff"), transition: "background 0.1s" }}>
+      style={{ display: "flex", alignItems: "center", gap: 12, padding: "9px 14px", borderBottom: "1px solid #eef0f2", cursor: "pointer", background: isNew ? "#f5f3ff" : undefined }}>
       {/* The diagram itself at tile size; a letter tile when it is not a sequence */}
       <SequenceRowThumb d={d} />
       {/* Title + meta (tiered) */}
@@ -914,7 +914,7 @@ function DiagramRow({ d, isShared, onOpen, onDelete, onRename, onTag, onViewCode
       )}
       {isShared && <span style={{ fontSize: 9, fontWeight: 600, color: "#65676b", background: "#f0f1f3", border: "1px solid #e4e6e8", borderRadius: 4, padding: "2px 6px", flexShrink: 0 }}>Public</span>}
       {/* Actions on hover */}
-      <div style={{ display: "flex", gap: 4, flexShrink: 0, opacity: hovered ? 1 : 0, transition: "opacity 0.1s" }} onClick={e => e.stopPropagation()}>
+      <div className="dc-row-actions" style={{ display: "flex", gap: 4, flexShrink: 0 }} onClick={e => e.stopPropagation()}>
         <button onClick={onRename} title="Rename" aria-label="Rename" style={rowActionBtn}>
           <svg width={12} height={12} viewBox="0 0 24 24" fill="none" stroke="#8a8d91" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round"><path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/></svg>
         </button>
@@ -1182,6 +1182,15 @@ export default function SequencesClient({ user, sequences: initial }: { user: Sh
           100% { opacity: 1; }
         }
         .dc-new-card { animation: dc-blink 0.45s ease-in-out 2; }
+        .dc-card { border: 2px solid transparent; box-shadow: 0 1px 4px rgba(0,0,0,0.05); transition: box-shadow 0.15s, transform 0.15s, border-color 0.15s; }
+        .dc-card:hover { border-color: #1c1e21; box-shadow: 0 8px 28px rgba(0,0,0,0.18), 0 0 0 3px rgba(28,30,33,0.08); transform: translateY(-2px); }
+        .dc-row { background: #ffffff; transition: background 0.1s; }
+        .dc-row:hover { background: #f7f8fa; }
+        .dc-row-actions { opacity: 0; pointer-events: none; transition: opacity 0.1s; }
+        .dc-row:hover .dc-row-actions, .dc-row:focus-within .dc-row-actions { opacity: 1; pointer-events: auto; }
+        .dc-grid { grid-template-columns: repeat(4, 1fr); }
+        @media (max-width: 1100px) { .dc-grid { grid-template-columns: repeat(3, 1fr); } }
+        @media (max-width: 820px) { .dc-grid { grid-template-columns: repeat(2, 1fr); } }
         .dc-card-actions { opacity: 0; pointer-events: none; transition: opacity 0.12s; }
         .dc-card:hover .dc-card-actions,
         .dc-card:focus-within .dc-card-actions { opacity: 1; pointer-events: auto; }
@@ -1191,7 +1200,7 @@ export default function SequencesClient({ user, sequences: initial }: { user: Sh
           .dc-search-wrap { flex: 1 !important; width: auto !important; min-width: 0 !important; }
           .dc-search-wrap input { width: 100% !important; }
           .dc-main { padding: 20px 16px 100px !important; }
-          .dc-grid { grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)) !important; gap: 10px !important; }
+          .dc-grid { grid-template-columns: repeat(2, 1fr) !important; gap: 10px !important; }
         }
       `}</style>
 
@@ -1305,11 +1314,11 @@ export default function SequencesClient({ user, sequences: initial }: { user: Sh
                     );
                   })}
                 </div>
+                {/* Demo's count is already on the tab and in the All pill above;
+                    only a missing lineup id is worth saying here. */}
                 <span style={{ fontSize: 12.5, color: "#8a8d91", fontWeight: 500, flexShrink: 0 }}>
                   {scope === "demo"
-                    ? (demoSequences.length < DEMO_IDS.length
-                        ? `${DEMO_IDS.length - demoSequences.length} of ${DEMO_IDS.length} missing`
-                        : `${demoSequences.length} live`)
+                    ? (demoSequences.length < DEMO_IDS.length ? `${DEMO_IDS.length - demoSequences.length} of ${DEMO_IDS.length} missing` : "")
                     : `${allSequences.length} diagram${allSequences.length === 1 ? "" : "s"}`}
                 </span>
                 {/* Opens the real /demo route rather than imitating it here.
@@ -1358,7 +1367,7 @@ export default function SequencesClient({ user, sequences: initial }: { user: Sh
             </div>
 
             {allSequences.length > 0 && (view === "grid" ? (
-              <div className="dc-grid" style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(200px, 1fr))", gap: 12 }}>
+              <div className="dc-grid" style={{ display: "grid", gap: 14 }}>
                 {allSequences.map(d => <SequenceCard key={d.id} {...cardProps(d)} />)}
               </div>
             ) : (

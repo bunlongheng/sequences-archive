@@ -308,7 +308,7 @@ function computeAutoLayout(d: Diagram, o: Pick<Opts, "iconMode">): Layout {
     return { textSize: FS, boxWidth, spacing, stepHeight, vPad: 0, margin };
 }
 
-function buildSvg(d: Diagram, o: Opts, lIn: Layout, createdAt?: string | Date, { interactive = true }: { interactive?: boolean } = {}): string {
+function buildSvg(d: Diagram, o: Opts, lIn: Layout, createdAt?: string | Date, { interactive = true, titleBlock = true }: { interactive?: boolean; titleBlock?: boolean } = {}): string {
     const { participants: ps_raw, messages: ms } = d;
     if (!ps_raw.length) return "";
     // Auto layout is resolved here rather than by each caller, so a server
@@ -321,7 +321,11 @@ function buildSvg(d: Diagram, o: Opts, lIn: Layout, createdAt?: string | Date, {
     const BOX_FS = 13;
     const BH = Math.max(36, Math.round(BOX_FS * 2.6));
     const diagramTitle = d.title ?? DEFAULT_DIAGRAM_TITLE;
-    const TOP_PAD = l.margin, BOT_PAD = l.margin, TITLE_H = 68, TP = 50;
+    // titleBlock: false drops the heading and byline AND the space they take,
+    // for surfaces that already show the title next to the render - a gallery
+    // tile, an index card - where drawing it twice is just noise.
+    const TOP_PAD = l.margin, BOT_PAD = l.margin;
+    const TITLE_H = titleBlock ? 68 : 0, TP = titleBlock ? 50 : 8;
     const HPAD = 24, ICON_W = o.iconMode === "icons" ? 26 : 0;
     const pBW = ps.map(p => Math.max(l.boxWidth, Math.ceil(p.label.length * (BOX_FS * 0.65) + ICON_W + HPAD)));
     const BW = Math.max(...pBW);
@@ -426,8 +430,8 @@ function buildSvg(d: Diagram, o: Opts, lIn: Layout, createdAt?: string | Date, {
     const subDate = isDark ? "#94a3b8" : "#718096";
     const titleAvailW = W - 2 * LP;
     const titleFS = Math.max(14, Math.min(30, Math.floor(titleAvailW / (diagramTitle.length * 0.58))));
-    parts.push(`<text id="diagram-title" x="${LP}" y="${titleY - 10}" dominant-baseline="middle" font-family="${f}" font-size="${titleFS}" font-weight="800" fill="${titleColor}" style="cursor:pointer">${esc(diagramTitle)}</text>`);
-    parts.push(`<text x="${LP}" y="${titleY + 20}" dominant-baseline="middle" font-family="${f}" font-size="11" fill="${subDate}"><tspan font-weight="800" fill="${subBH}">BH</tspan><tspan font-weight="300" fill="${subPipe}"> | </tspan><tspan font-weight="400">${dateStr} · ${timeStr}</tspan></text>`);
+    if (titleBlock) parts.push(`<text id="diagram-title" x="${LP}" y="${titleY - 10}" dominant-baseline="middle" font-family="${f}" font-size="${titleFS}" font-weight="800" fill="${titleColor}" style="cursor:pointer">${esc(diagramTitle)}</text>`);
+    if (titleBlock) parts.push(`<text x="${LP}" y="${titleY + 20}" dominant-baseline="middle" font-family="${f}" font-size="11" fill="${subDate}"><tspan font-weight="800" fill="${subBH}">BH</tspan><tspan font-weight="300" fill="${subPipe}"> | </tspan><tspan font-weight="400">${dateStr} · ${timeStr}</tspan></text>`);
     const iconKeys = assignIconKeys(ps, o.icons);
     ps.forEach((p, i) => {
         const col = pcol(i);

@@ -79,7 +79,7 @@ export default function LandingDemo({ sequences }: { sequences: Demo[] }) {
                 <div style={{ aspectRatio: "2.05", background: "#fff", display: "flex", alignItems: "center", justifyContent: "center", padding: 12, overflow: "hidden" }}>
                   {/* Public SVG render — object-fit:contain shows the whole diagram
                       (nothing clipped), scaled to fit the card. */}
-                  <img src={`/svg/${d.id}`} alt={d.title} loading="lazy"
+                  <img src={`/svg/${d.id}?title=0`} alt={d.title} loading="lazy"
                     style={{ maxWidth: "100%", maxHeight: "100%", objectFit: "contain" }} />
                 </div>
               </a>

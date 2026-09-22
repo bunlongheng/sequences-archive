@@ -33,7 +33,10 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
   try {
     const diagram = parse(code);
     if (!diagram.title && title) diagram.title = title;
-    svg = buildSvg(diagram, opts, layout, created_at);
+    // ?title=0 for surfaces that print the title beside the render (gallery
+    // tiles, index cards) - without it every tile shows its title twice.
+    const titleBlock = req.url ? new URL(req.url).searchParams.get("title") !== "0" : true;
+    svg = buildSvg(diagram, opts, layout, created_at, { titleBlock });
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : String(err);
     console.error("[svg] render failed:", msg);
