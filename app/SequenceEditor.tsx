@@ -434,10 +434,13 @@ export default function SequenceEditor() {
             Math.ceil(p.label.length * (FS * 0.65) + ICON_W + HPAD)
         ));
 
-        // Step height: compress for dense sequences
-        const stepHeight = rows > 40 ? 32 : rows > 20 ? 36 : rows > 10 ? 40 : 44;
+        // Row pitch: the tallest thing on a row is the 24px step circle (cr = 12
+        // in the renderer); the pill is FS + 8. 8px of air between rows is the
+        // tightest that still reads as separate rows, at any row count.
+        const stepHeight = Math.max(24, FS + 8) + 8;
 
-        // Spacing: box width + enough room for the longest adjacent message pill + step circle
+        // Spacing: display value only. Under auto the renderer ignores l.spacing
+        // and widens each column pair to exactly the longest pill that crosses it.
         const maxMsgLen = diagram.messages.reduce((m, msg) => Math.max(m, msg.text.length), 0);
         const pillEstimate = maxMsgLen * (FS * 0.65) + 48; // 0.65 char width + circle room
         const spacing = Math.round(Math.max(boxWidth + 80, boxWidth + pillEstimate));
@@ -445,8 +448,16 @@ export default function SequenceEditor() {
         // vPad: zero by default - stepHeight already contains the row, so 0 is tight without overlap
         const vPad = 0;
 
-        // margin: proportional to spacing
-        const margin = Math.round(Math.max(80, spacing * 0.4));
+        // Margin: outer padding on all 4 sides. Was 40% of the global-longest
+        // pill, which is what blew the margins out whenever one message was
+        // long. The one real constraint is a self-message on the LAST
+        // participant: its pill hangs 16px right of the lifeline and the
+        // renderer does not widen the canvas for it, so the margin must.
+        const last = diagram.participants[diagram.participants.length - 1]?.id;
+        const selfPillW = diagram.messages
+            .filter(m => m.from === last && m.to === last)
+            .reduce((w, m) => Math.max(w, m.text.length * (FS * 0.62) + 12), 0);
+        const margin = Math.max(56, Math.ceil(16 + selfPillW - boxWidth / 2));
 
         return { textSize: FS, boxWidth, spacing, stepHeight, vPad, margin };
     }, [opts.autoLayout, opts.iconMode, diagram, layout]);
@@ -490,6 +501,20 @@ export default function SequenceEditor() {
             return () => cancelAnimationFrame(id);
         }
     }, [svgDims, hasFit, fitZoom]);
+
+    // ── Auto-fit 3s after the last layout change ──────────────────────────
+    // Dragging a slider fires an update per pixel, so the timer restarts on
+    // each one and the fit lands only once the user stops. Read fitZoom from a
+    // ref rather than the dep array: its identity changes with svgDims, which
+    // would also arm this on code edits and option toggles - this belongs to
+    // the layout sliders and the Auto toggle alone.
+    const fitZoomRef = useRef(fitZoom);
+    fitZoomRef.current = fitZoom;
+    useEffect(() => {
+        if (!hasFit) return;
+        const t = setTimeout(() => fitZoomRef.current(), 3000);
+        return () => clearTimeout(t);
+    }, [layout, opts.autoLayout, hasFit]);
 
     // Highlight selected participant box - adds a blue outline rect ON TOP of the existing box
     // (does not overwrite the original black border)

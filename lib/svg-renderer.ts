@@ -227,7 +227,11 @@ function buildSvg(d: Diagram, o: Opts, l: Layout, createdAt?: string | Date, { i
     const pBW = ps.map(p => Math.max(l.boxWidth, Math.ceil(p.label.length * (BOX_FS * 0.65) + ICON_W + HPAD)));
     const BW = Math.max(...pBW);
     const idx = new Map(ps.map((p, i) => [p.id, i]));
-    const CHAR_W = FS * 0.62, PILL_PAD = 56;
+    // A pill is text + 12, and each end of the arrow reserves 24 for the step
+    // circle (circleRoom below), so a column pair needs text + 60 to show the
+    // pill whole. At 56 the longest message in every pair lost its last 2
+    // characters to an ellipsis, under auto layout, every time.
+    const CHAR_W = FS * 0.62, PILL_PAD = 60;
     const baseCol = o.autoLayout ? Math.max(BW + 40, 120) : l.spacing;
     const colGap = new Array(Math.max(1, N - 1)).fill(baseCol) as number[];
     if (o.autoLayout) {
@@ -413,7 +417,10 @@ function buildSvg(d: Diagram, o: Opts, l: Layout, createdAt?: string | Date, { i
                 const availW = Math.max(40, rightBound - leftBound);
                 let pillText = msg.text;
                 let pillW = Math.max(40, pillText.length * (FS * 0.62) + 12);
-                if (pillW > availW) { pillW = availW; const mc = Math.max(1, Math.floor((availW - 20) / (FS * 0.62))); if (mc < pillText.length) pillText = pillText.slice(0, mc) + "…"; }
+                // Under auto layout a column pair is sized to exactly this pill, so
+                // pillW and availW are equal up to float error; a bare > would
+                // truncate the very message the gap was widened for by 1 char.
+                if (pillW > availW + 0.5) { pillW = availW; const mc = Math.max(1, Math.floor((availW - 20) / (FS * 0.62))); if (mc < pillText.length) pillText = pillText.slice(0, mc) + "…"; }
                 const pillX = Math.max(leftBound, Math.min(mid - pillW / 2, rightBound - pillW));
                 const pillCx = pillX + pillW / 2;
                 parts.push(`<rect x="${pillX}" y="${pillY}" width="${pillW}" height="${pillH}" rx="${pillH / 2}" fill="${th.bg}"/>`);
