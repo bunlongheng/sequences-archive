@@ -5,7 +5,8 @@ import { signOut as nextAuthSignOut } from "next-auth/react";
 import { CuteToast, showToast } from "@/app/CuteToast";
 import { Bot, Plug, Briefcase, User as UserIcon, FlaskConical, Clipboard, GraduationCap, Lightbulb, Rocket, Star, Heart, Tag, Youtube } from "lucide-react";
 import { relativeTime, buildTagColorMap, TAG_PALETTE } from "@/lib/editor-logic";
-import { PAL, stripFrontmatter, detectSequenceType } from "@/lib/svg-renderer";
+import { PAL, THEMES, stripFrontmatter, detectSequenceType, parse, buildSvg, DEFAULT_OPTS, DEFAULT_LAYOUT } from "@/lib/svg-renderer";
+import type { Opts, Layout } from "@/lib/svg-renderer";
 import { fireflies } from "./fireflies";
 
 // Shape the shell passes in: NextAuth session user mapped to the fields this
@@ -20,6 +21,7 @@ type Sequence = {
   sequence_type: string; created_at: string; updated_at: string; code: string;
   tags: string[];
   youtube_id?: string | null;
+  settings?: { opts?: Partial<Opts>; layout?: Partial<Layout> } | null;
 };
 
 // ── Shared (public) ───────────────────────────────────────────────────────────
@@ -52,6 +54,53 @@ function lsGet(key: string): string | null {
 }
 function loadShared(): Set<string> {
   try { return new Set(JSON.parse(lsGet(LS_SHARED) ?? "[]")); } catch { return new Set(); }
+}
+
+// ── Card preview: the real diagram ───────────────────────────────────────────
+// Same renderer and same saved settings as the editor and /svg/<id>, so the
+// card shows the diagram itself, not a sketch of it. The root width/height are
+// swapped for 100% so the viewBox scales it to whatever width the card has,
+// letterboxed inside a 2:1 box on the theme's own background. Anything that is
+// not a sequenceDiagram, or fails to parse, keeps the sketch minimap.
+function useSequenceSvg(d: Sequence) {
+  return useMemo(() => {
+    if (detectSequenceType(d.code) !== "sequence") return null;
+    try {
+      const parsed = parse(d.code);
+      if (!parsed.title && d.title) parsed.title = d.title;
+      const opts: Opts = { ...DEFAULT_OPTS, ...(d.settings?.opts ?? {}) };
+      const layout: Layout = { ...DEFAULT_LAYOUT, ...(d.settings?.layout ?? {}) };
+      const svg = buildSvg(parsed, opts, layout, d.created_at, { interactive: false })
+        .replace(/ width="[\d.]+" height="[\d.]+" viewBox=/, ' width="100%" height="100%" viewBox=');
+      return { svg, bg: THEMES[opts.theme]?.bg ?? "#ffffff" };
+    } catch { return null; }
+  }, [d.code, d.title, d.settings, d.created_at]);
+}
+
+function SequencePreview({ d }: { d: Sequence }) {
+  const preview = useSequenceSvg(d);
+  if (!preview) return <SequenceMinimap code={d.code} type={d.sequence_type} />;
+  return (
+    <div style={{ width: "100%", aspectRatio: "2 / 1", borderRadius: 8, overflow: "hidden", background: preview.bg, border: "1px solid #eceef0" }}
+      dangerouslySetInnerHTML={{ __html: preview.svg }} />
+  );
+}
+
+// Row thumbnail: the same render at tile size. Too small to read, but the shape
+// of a diagram is recognizable and it is the diagram, not a letter. A
+// non-sequence falls back to the coloured letter tile the rows always had.
+function SequenceRowThumb({ d }: { d: Sequence }) {
+  const preview = useSequenceSvg(d);
+  const c = colorFor(d.title || "");
+  if (!preview) return (
+    <div style={{ width: 92, height: 50, borderRadius: 8, background: tint(c, 0.14), border: `1px solid ${tint(c, 0.28)}`, color: c, fontSize: 14, fontWeight: 800, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+      {letterFor(d.title || "")}
+    </div>
+  );
+  return (
+    <div aria-hidden style={{ width: 92, height: 50, borderRadius: 8, overflow: "hidden", background: preview.bg, border: "1px solid #eceef0", flexShrink: 0 }}
+      dangerouslySetInnerHTML={{ __html: preview.svg }} />
+  );
 }
 
 // ── Sequence minimap ───────────────────────────────────────────────────────────
@@ -783,7 +832,7 @@ function SequenceCard({ d, isShared, onOpen, onDelete, onRename, onTag, onViewCo
       <div style={{ padding: "0 12px 13px" }}>
         {d.youtube_id
           ? <YouTubeThumb id={d.youtube_id} title={d.title} />
-          : <SequenceMinimap code={d.code} type={d.sequence_type} />}
+          : <SequencePreview d={d} />}
       </div>
 
       {/* Actions - visible on hover or keyboard focus (:focus-within), always mounted so Tab can reach them */}
@@ -839,12 +888,8 @@ function DiagramRow({ d, isShared, onOpen, onDelete, onRename, onTag, onViewCode
       data-seq-id={d.id}
       onKeyDown={e => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); onOpen(); } }}
       style={{ display: "flex", alignItems: "center", gap: 12, padding: "9px 14px", borderBottom: "1px solid #eef0f2", cursor: "pointer", background: hovered ? "#f7f8fa" : (isNew ? "#f5f3ff" : "#ffffff"), transition: "background 0.1s" }}>
-      {/* Dynamic letter tile - first letter, colored by title */}
-      {(() => { const c = colorFor(d.title || ""); return (
-        <div style={{ width: 32, height: 32, borderRadius: 8, background: tint(c, 0.14), border: `1px solid ${tint(c, 0.28)}`, color: c, fontSize: 14, fontWeight: 800, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
-          {letterFor(d.title || "")}
-        </div>
-      ); })()}
+      {/* The diagram itself at tile size; a letter tile when it is not a sequence */}
+      <SequenceRowThumb d={d} />
       {/* Title + meta (tiered) */}
       <div style={{ minWidth: 0, flex: 1 }}>
         <div style={{ fontSize: 13.5, fontWeight: 600, color: "#1c1e21", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{d.title}</div>
