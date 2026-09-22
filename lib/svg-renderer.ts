@@ -11,7 +11,7 @@ export interface Layout { stepHeight: number; boxWidth: number; spacing: number;
 export const DEFAULT_OPTS: Opts = { coloredLines: true, coloredNumbers: true, coloredText: true, showNotes: false, font: "Roboto", lifelineDash: "solid", theme: "light", iconMode: "icons", icons: {}, boxOverlay: "gloss", autoLayout: true, labelOverrides: {}, colorOverrides: {} };
 export const DEFAULT_LAYOUT: Layout = { stepHeight: 34, boxWidth: 141, spacing: 250, textSize: 13, margin: 80, vPad: 0 };
 
-export { parse, buildSvg, esc, PAL, PAL_MONOKAI, THEMES, ICON_NODES, guessIconKey, renderIcon, detectSequenceType, DEFAULT_DIAGRAM_TITLE, LIFELINE_DASH, DIAGRAM_TYPES, stripFrontmatter };
+export { parse, buildSvg, esc, PAL, PAL_MONOKAI, THEMES, ICON_NODES, guessIconKey, assignIconKeys, renderIcon, detectSequenceType, DEFAULT_DIAGRAM_TITLE, LIFELINE_DASH, DIAGRAM_TYPES, stripFrontmatter };
 export type { INode };
 
 const PAL = ["#ef4444","#f97316","#eab308","#22c55e","#14b8a6","#06b6d4","#3b82f6","#8b5cf6","#ec4899","#f43f5e","#84cc16","#0891b2"];
@@ -42,34 +42,89 @@ const ICON_NODES: Record<string, INode[]> = {
     rocket:       [["path",{d:"M9 12a22 22 0 0 1 2-3.95A12.88 12.88 0 0 1 22 2c0 2.72-.78 7.5-6 11a22.4 22.4 0 0 1-4 2z"}],["path",{d:"M9 12H4s.55-3.03 2-4c1.62-1.08 5 .05 5 .05"}],["path",{d:"M12 15v5s3.03-.55 4-2c1.08-1.62 0-5 0-5"}]],
     "shield-check":[["path",{d:"M20 13c0 5-3.5 7.5-7.66 8.95a1 1 0 0 1-.67 0C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.24-2.72a1.17 1.17 0 0 1 1.52 0C14.51 3.81 17 5 19 5a1 1 0 0 1 1 1z"}],["path",{d:"m9 12 2 2 4-4"}]],
     package:      [["path",{d:"M11 21.73a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73z"}],["path",{d:"M12 22V12"}],["path",{d:"M3.29 7 12 12 20.71 7"}]],
+    chrome:       [["circle",{cx:12,cy:12,r:10}],["circle",{cx:12,cy:12,r:4}],["line",{x1:21.17,x2:12,y1:8,y2:8}],["line",{x1:3.95,x2:8.54,y1:6.06,y2:14}],["line",{x1:10.88,x2:15.46,y1:21.94,y2:14}]],
+    "file-code":  [["path",{d:"M10 12.5 8 15l2 2.5"}],["path",{d:"m14 12.5 2 2.5-2 2.5"}],["path",{d:"M14 2v4a2 2 0 0 0 2 2h4"}],["path",{d:"M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7z"}]],
+    link:         [["path",{d:"M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"}],["path",{d:"M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"}]],
+    layers:       [["path",{d:"m12.83 2.18a2 2 0 0 0-1.66 0L2.6 6.08a1 1 0 0 0 0 1.83l8.58 3.91a2 2 0 0 0 1.66 0l8.58-3.9a1 1 0 0 0 0-1.83Z"}],["path",{d:"m22 17.65-9.17 4.16a2 2 0 0 1-1.66 0L2 17.65"}],["path",{d:"m22 12.65-9.17 4.16a2 2 0 0 1-1.66 0L2 12.65"}]],
+    code:         [["polyline",{points:"16 18 22 12 16 6"}],["polyline",{points:"8 6 2 12 8 18"}]],
 };
 
+// Whole words only. The old rules were bare substrings, which is how "shadow"
+// became a gear (sh), "memory" a person (me) and "email" a robot (ai). Every
+// matching rule is a candidate, in this order, so a label like "overlay.js" has
+// a second choice (layers) when its first (file-code) is already taken.
+const ICON_RULES: [string, RegExp][] = [
+    ["user",         /\b(you|me|i|user|users|client|person|people|human|customer|visitor|owner|admin|dev|developer|engineer|operator)\b/],
+    ["bot",          /\b(agent|agt|bot|ai|robot|llm|gpt|claude|assistant|model|copilot)\b/],
+    ["file-code",    /\.(m?[jt]sx?|c?js|py|rb|go|rs|php|java|kt|swift|s?css|html?|json|ya?ml|toml|sh|zsh|sql|md|txt|env)\b|\b(script|module)\b/],
+    ["code",         /\.(m?[jt]sx?|c?js|py|rb|go|rs|php|java|kt|swift|s?css|html?|json|ya?ml|toml|sh|zsh|sql|md|txt|env)\b|\b(script|module|function|fn)\b/],
+    ["chrome",       /\b(chrome|chromium|toolbar|extension|popup)\b/],
+    ["link",         /\b(page|pages|tab|url|link|site|website|webpage|document|dom)\b/],
+    ["layers",       /\b(shadow|overlay|layer|layers|component|widget|iframe|panel)\b/],
+    ["server",       /\b(api|server|backend|svc|service|micro|microservice|http|route|handler|endpoint|worker|gateway|proxy)\b/],
+    ["database",     /\b(db|database|sql|postgres|mysql|mongo|dynamo|data|store|table|supabase)\b/],
+    ["zap",          /\b(cache|redis|memcache|cdn|edge)\b/],
+    ["plug",         /\b(mcp|plugin|webhook|hook|connector|integration|adapter)\b/],
+    ["git-branch",   /\b(git|github|gitlab|repo|repository|version|commit|branch|pr)\b/],
+    ["globe",        /\b(web|browser|frontend|ui|react|next|nextjs|html|www|internet)\b/],
+    ["brain",        /\b(mem|memory|context|knowledge|rag|embedding|embeddings|vector)\b/],
+    ["settings",     /\b(sh|shell|bash|zsh|terminal|cmd|cli|exec|process|config|runtime|root|engine|core)\b/],
+    ["folder",       /\b(file|files|fs|storage|disk|s3|blob|drive|folder|bucket)\b/],
+    ["cloud",        /\b(cloud|aws|azure|gcp|infra|deploy|lambda|serverless)\b/],
+    ["mail",         /\b(queue|msg|kafka|rabbit|rabbitmq|sqs|pubsub|bus|email|mail|smtp|send|inbox)\b/],
+    ["lock",         /\b(auth|security|oauth|jwt|sso|iam|secret|login|session|token)\b/],
+    ["key",          /key\b|\b(credential|credentials)\b/],
+    ["search",       /\b(search|elastic|elasticsearch|algolia|query|index)\b/],
+    ["chart-bar",    /\b(log|logs|logger|monitor|metric|metrics|grafana|datadog|obs|observability|analytics|report)\b/],
+    ["credit-card",  /\b(pay|payment|payments|stripe|billing|invoice|wallet|checkout)\b/],
+    ["smartphone",   /\b(mobile|app|ios|android|phone|device)\b/],
+    ["rocket",       /\b(ci|cd|pipeline|build|vercel|netlify|action|actions|release)\b/],
+    ["shield-check", /\b(test|tests|spec|qa|lint|check|checks|e2e|cypress|playwright|validator|validation)\b/],
+    ["bell",         /\b(notification|notifications|alert|alerts|notify|push|toast)\b/],
+];
+
+// When a participant has no candidate left, take the first unused icon from
+// here. Neutral shapes first; a person or a robot is never a fallback, because
+// a person icon on "Foo" is exactly the kind of guess this exists to stop.
+const ICON_POOL = ["package", "layers", "settings", "code", "folder", "server", "cloud", "globe", "zap", "plug", "link", "search", "key", "lock", "mail", "bell", "rocket", "chart-bar", "brain", "file-code", "database", "git-branch", "smartphone", "credit-card", "shield-check", "chrome"];
+
+function iconCandidates(label: string): string[] {
+    const l = label.toLowerCase();
+    return ICON_RULES.filter(([, re]) => re.test(l)).map(([k]) => k);
+}
+
 function guessIconKey(s: string): string {
-    const l = s.toLowerCase();
-    if (/user|client|person|human|customer|visitor|me/.test(l))            return "user";
-    if (/agent|agt|bot|ai|robot|llm|gpt|claude|assistant/.test(l))         return "bot";
-    if (/api|server|backend|svc|service|micro|http/.test(l))               return "server";
-    if (/db|database|sql|postgres|mysql|mongo|dynamo|data/.test(l))        return "database";
-    if (/cache|redis|memcache/.test(l))                                     return "zap";
-    if (/mcp|plugin|webhook|hook|connector/.test(l))                        return "plug";
-    if (/git|github|gitlab|repo|version|commit/.test(l))                    return "git-branch";
-    if (/web|browser|frontend|ui|react|next|html/.test(l))                  return "globe";
-    if (/mem|memory|context|knowledge/.test(l))                             return "brain";
-    if (/sh|shell|bash|terminal|cmd|cli|exec/.test(l))                      return "settings";
-    if (/file|fs|storage|disk|s3|blob|drive/.test(l))                       return "folder";
-    if (/cloud|aws|azure|gcp|infra|deploy/.test(l))                         return "cloud";
-    if (/queue|msg|kafka|rabbit|sqs|pubsub|bus/.test(l))                    return "mail";
-    if (/auth|security|oauth|jwt|sso|iam|secret/.test(l))                   return "lock";
-    if (/key/.test(l))                                                       return "key";
-    if (/search|elastic|algolia|query/.test(l))                             return "search";
-    if (/log|monitor|metric|grafana|datadog|obs/.test(l))                   return "chart-bar";
-    if (/email|mail|smtp|send/.test(l))                                     return "mail";
-    if (/pay|stripe|billing|invoice|wallet/.test(l))                        return "credit-card";
-    if (/mobile|app|ios|android|phone/.test(l))                             return "smartphone";
-    if (/ci|cd|pipeline|build|vercel|netlify|action/.test(l))               return "rocket";
-    if (/test|spec|qa|lint|check|e2e|cypress|playwright/.test(l))             return "shield-check";
-    if (/notification|alert|notify|push/.test(l))                           return "bell";
-    return "package";
+    return iconCandidates(s)[0] ?? "package";
+}
+
+// One icon per participant, no repeats. Explicit picks (o.icons) are honored
+// and reserved first, so an auto pick never collides with something the owner
+// chose. Auto picks go by rank, not by participant order: every first choice
+// is placed before any second choice, so "Closed shadow root" keeps layers
+// even when an earlier "overlay.js" would have taken it as a runner-up. What
+// is still unplaced after the candidates takes the first unused pool icon.
+function assignIconKeys(ps: { id: string; label: string }[], explicit: Record<string, string> = {}): Record<string, string> {
+    const used = new Set<string>();
+    const out: Record<string, string> = {};
+    for (const p of ps) {
+        const k = explicit[p.id];
+        if (k && ICON_NODES[k]) { out[p.id] = k; used.add(k); }
+    }
+    const cands = ps.map(p => out[p.id] ? [] : iconCandidates(p.label));
+    const maxRank = Math.max(0, ...cands.map(c => c.length));
+    for (let r = 0; r < maxRank; r++) {
+        ps.forEach((p, i) => {
+            const k = cands[i][r];
+            if (!out[p.id] && k && !used.has(k)) { out[p.id] = k; used.add(k); }
+        });
+    }
+    for (const p of ps) {
+        if (out[p.id]) continue;
+        const pick = ICON_POOL.find(k => !used.has(k)) ?? "package";
+        out[p.id] = pick;
+        used.add(pick);
+    }
+    return out;
 }
 
 function renderIcon(key: string, icx: number, icy: number, size: number, color = "white"): string {
@@ -329,6 +384,7 @@ function buildSvg(d: Diagram, o: Opts, l: Layout, createdAt?: string | Date, { i
     const titleFS = Math.max(14, Math.min(30, Math.floor(titleAvailW / (diagramTitle.length * 0.58))));
     parts.push(`<text id="diagram-title" x="${LP}" y="${titleY - 10}" dominant-baseline="middle" font-family="${f}" font-size="${titleFS}" font-weight="800" fill="${titleColor}" style="cursor:pointer">${esc(diagramTitle)}</text>`);
     parts.push(`<text x="${LP}" y="${titleY + 20}" dominant-baseline="middle" font-family="${f}" font-size="11" fill="${subDate}"><tspan font-weight="800" fill="${subBH}">BH</tspan><tspan font-weight="300" fill="${subPipe}"> | </tspan><tspan font-weight="400">${dateStr} · ${timeStr}</tspan></text>`);
+    const iconKeys = assignIconKeys(ps, o.icons);
     ps.forEach((p, i) => {
         const col = pcol(i);
         const c = o.coloredLines ? col + "60" : "#d1d5db";
@@ -353,7 +409,7 @@ function buildSvg(d: Diagram, o: Opts, l: Layout, createdAt?: string | Date, { i
         const labelText = labelEmoji ? p.label.slice(emojiM![0].length).trim() : p.label;
         if (o.iconMode === "icons") {
             const IW = BH; const pColor = pcol(i); const ISIZE = Math.min(BH - 8, 18);
-            const iconKey = ICON_NODES[o.icons[p.id]] ? o.icons[p.id] : guessIconKey(p.label);
+            const iconKey = iconKeys[p.id];
             const r = Math.max(0, BR - 1);
             const wx = x + 1, wy = y + 1, ww = IW - 1, wh = BH - 2;
             const wp = `M${wx+r},${wy} H${wx+ww} V${wy+wh} H${wx+r} Q${wx},${wy+wh} ${wx},${wy+wh-r} V${wy+r} Q${wx},${wy} ${wx+r},${wy} Z`;

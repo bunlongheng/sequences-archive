@@ -9,7 +9,7 @@ import LZString from "lz-string";
 const MermaidRenderer = dynamic(() => import("./MermaidRenderer"), { ssr: false });
 import {
   parse, buildSvg, esc, detectSequenceType, stripFrontmatter,
-  guessIconKey, renderIcon,
+  assignIconKeys, renderIcon,
   PAL, PAL_MONOKAI, THEMES, ICON_NODES, LIFELINE_DASH, DIAGRAM_TYPES,
   DEFAULT_OPTS, DEFAULT_LAYOUT, DEFAULT_DIAGRAM_TITLE,
 } from "@/lib/svg-renderer";
@@ -797,12 +797,8 @@ No explanation, no markdown, just the JSON object.`,
             upd({ icons: newIcons });
             showToast("Icons updated ✓", { color: "#22c55e" });
         } catch {
-            // Fallback: use the regex-based guessIconKey
-            const newIcons: Record<string, string> = {};
-            diagram.participants.forEach(p => {
-                newIcons[p.id] = guessIconKey(p.label);
-            });
-            upd({ icons: newIcons });
+            // Fallback: the same word-rule assignment the renderer uses, one icon each
+            upd({ icons: assignIconKeys(diagram.participants) });
             showToast("Icons set (fallback)", { color: "#f59e0b" });
         }
     }, [code, diagram.participants, opts.icons, upd]);

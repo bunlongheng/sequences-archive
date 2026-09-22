@@ -3,7 +3,7 @@ import { useEffect, useRef, useState } from "react";
 import dynamic from "next/dynamic";
 const QRCodeSVG = dynamic(() => import("qrcode.react").then(m => ({ default: m.QRCodeSVG })), { ssr: false });
 import { showToast } from "./CuteToast";
-import { guessIconKey, ICON_NODES } from "@/lib/svg-renderer";
+import { assignIconKeys, ICON_NODES } from "@/lib/svg-renderer";
 import type { Participant, Opts, Layout } from "@/lib/svg-renderer";
 
 // Page-only: keys list for the IconPicker UI (icon defs imported from lib)
@@ -103,6 +103,8 @@ export function SettingsContent({
     tab: "general" | "components" | "share"; setTab: (t: "general" | "components" | "share") => void;
     selectedPid?: string | null;
 }) {
+    // Same unique icon per participant that the renderer draws, label overrides included
+    const iconKeys = assignIconKeys(participants.map(p => ({ id: p.id, label: opts.labelOverrides?.[p.id] ?? p.label })), opts.icons);
     const fs = (base: number) => mobile ? Math.round(base * 1.2) : base;
     const ut = UI_THEMES[opts.theme] ?? UI_THEMES.light;
 
@@ -326,7 +328,7 @@ export function SettingsContent({
                         </div>
                         <div style={{ display: "flex", flexDirection: "column", gap: 5 }}>
                             {participants.map(p => {
-                                const currentKey = ICON_NODES[opts.icons[p.id]] ? opts.icons[p.id] : guessIconKey(p.label);
+                                const currentKey = iconKeys[p.id];
                                 const isSelected = selectedPid === p.id;
                                 const effectiveColor = opts.colorOverrides?.[p.id] ?? p.color;
                                 const hasOverride = !!opts.colorOverrides?.[p.id];
