@@ -950,6 +950,12 @@ function DiagramRow({ d, isShared, onOpen, onDelete, onRename, onTag, onViewCode
 // ── Avatar cache ──────────────────────────────────────────────────────────────
 const LS_KEY = "sequences_user_cache"; // last known Google profile photo URL
 
+// The owner's photo, served by GitHub's CDN. The Google URL on the NextAuth
+// user row intermittently fails to load when hotlinked, and the old onError
+// went straight to the letter tile - which is why the header kept showing "B".
+// Order is: the session's Google photo, then this, then the letter.
+const OWNER_AVATAR = process.env.NEXT_PUBLIC_OWNER_AVATAR ?? "https://avatars.githubusercontent.com/u/11523064?v=4";
+
 // ── Main ──────────────────────────────────────────────────────────────────────
 export default function SequencesClient({ user, sequences: initial }: { user: ShellUser; sequences: Sequence[] }) {
   const [sequences, setSequences] = useState(initial);
@@ -960,10 +966,12 @@ export default function SequencesClient({ user, sequences: initial }: { user: Sh
   const [newCardId, setNewCardId] = useState<string | null>(null);
   const [showMenu, setShowMenu] = useState(false);
   const [search, setSearch] = useState("");
-  // Seeded from the session so the photo is in the server HTML (no post-hydration flash).
-  const [avatarSrc, setAvatarSrc] = useState<string | null>(
-    user.user_metadata?.avatar_url ?? user.user_metadata?.picture ?? null
-  );
+  // Photo sources in order: the session's Google photo, then the CDN copy, then
+  // the letter tile. Derived rather than stored: the previous version kept it in
+  // state and re-synced from `user` in an effect, so an onError fallback was
+  // immediately overwritten by the next render and the header sat on the letter.
+  // A source that fails is remembered and never chosen again.
+  const [failedPhotos, setFailedPhotos] = useState<string[]>([]);
   const [renamingSequence, setRenamingSequence] = useState<Sequence | null>(null);
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
   const [showDocs, setShowDocs] = useState(false);
@@ -993,18 +1001,11 @@ export default function SequencesClient({ user, sequences: initial }: { user: Sh
   }, []);
   const name = user.user_metadata?.full_name ?? user.user_metadata?.name ?? user.email ?? "";
 
-  // Google photo from the session, cached so it paints instantly on the next
-  // load (and survives the client path where getSession() has no image).
-  useEffect(() => {
-    const liveUrl = user.user_metadata?.avatar_url ?? user.user_metadata?.picture;
-    if (liveUrl) {
-      setAvatarSrc(liveUrl);
-      try { localStorage.setItem(LS_KEY, liveUrl); } catch {}
-      return;
-    }
-    const cached = lsGet(LS_KEY);
-    if (cached) setAvatarSrc(cached);
-  }, [user]);
+  const avatarSrc = [user.user_metadata?.avatar_url, user.user_metadata?.picture, OWNER_AVATAR]
+    .find((u): u is string => !!u && !failedPhotos.includes(u)) ?? null;
+  const markPhotoFailed = useCallback((url: string | null) => {
+    if (url) setFailedPhotos(f => (f.includes(url) ? f : [...f, url]));
+  }, []);
 
   useEffect(() => {
     const h = (e: MouseEvent) => { if (menuRef.current && !menuRef.current.contains(e.target as Node)) setShowMenu(false); };
@@ -1233,7 +1234,12 @@ export default function SequencesClient({ user, sequences: initial }: { user: Sh
           <button onClick={() => setShowMenu(v => !v)} aria-label="Account menu"
             style={{ width: 34, height: 34, borderRadius: "50%", overflow: "hidden", border: showMenu ? "2px solid #1c1e21" : "2px solid #e4e6e8", cursor: "pointer", padding: 0, background: "#e4e6e8", transition: "border-color 0.15s", display: "flex", alignItems: "center", justifyContent: "center", position: "relative" }}>
             <span style={{ fontSize: 13, fontWeight: 700, color: "#1c1e21", userSelect: "none" }}>{name[0]?.toUpperCase()}</span>
-            {avatarSrc && <img src={avatarSrc} alt="" referrerPolicy="no-referrer" style={{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "cover" }} onError={() => { setAvatarSrc(null); try { localStorage.removeItem(LS_KEY); } catch {} }} />}
+            {avatarSrc && <img src={avatarSrc} alt="" referrerPolicy="no-referrer" style={{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "cover" }} onError={() => markPhotoFailed(avatarSrc)}
+              // The <img> is in the server HTML, so it can finish failing before
+              // React hydrates and onError is ever attached - which is exactly
+              // how a dead Google URL kept the header on the letter tile. This
+              // ref catches an image that arrived already broken.
+              ref={el => { if (el?.complete && !el.naturalWidth) markPhotoFailed(avatarSrc); }} />}
           </button>
           {showMenu && (
             <div style={{ position: "absolute", top: 42, right: 0, width: 210, background: "#ffffff", borderRadius: 12, boxShadow: "0 8px 32px rgba(0,0,0,0.12)", border: "1px solid #e4e6e8", overflow: "hidden", zIndex: 50 }}>
