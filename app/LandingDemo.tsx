@@ -1,6 +1,6 @@
 "use client";
-import Image from "next/image";
 import SocialFooter from "./SocialFooter";
+import Wordmark from "./Wordmark";
 
 type Demo = { id: string; title: string; sequence_type: string };
 
@@ -36,10 +36,7 @@ export default function LandingDemo({ sequences }: { sequences: Demo[] }) {
       <div style={{ position: "relative", zIndex: 1, maxWidth: 1440, margin: "0 auto", padding: "0 24px 22px", height: "100%", boxSizing: "border-box", display: "flex", flexDirection: "column" }}>
         {/* Header — showcase only, no sign-in (login is owner-only). */}
         <header style={{ height: 52, display: "flex", alignItems: "center" }}>
-          <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-            <Image src="/icon-512.png" alt="Sequences" width={32} height={32} priority style={{ borderRadius: 8 }} />
-            <span style={{ fontSize: 17, fontWeight: 800, letterSpacing: "-0.01em", color: "#111827" }}>Sequences</span>
-          </div>
+          <Wordmark size={32} priority />
         </header>
 
         {/* Hero */}
@@ -72,14 +69,14 @@ export default function LandingDemo({ sequences }: { sequences: Demo[] }) {
             {demos.map((d, i) => (
               <a key={d.id} href={`/d/${d.id}`} className="ld-card" style={{
                 display: "flex", flexDirection: "column", background: "#fff",
-                border: "1px solid #e6e8ee", borderRadius: 16, overflow: "hidden", height: "100%",
+                border: "1px solid #e6e8ee", borderRadius: 16, overflow: "hidden",
                 textDecoration: "none", boxShadow: "0 1px 4px rgba(15,23,42,0.05)",
                 animationDelay: `${0.05 * i}s`,
               }}>
                 <div style={{ padding: "8px 13px 7px", display: "flex", alignItems: "center", gap: 8, borderBottom: "1px solid #f1f2f6", flexShrink: 0 }}>
                   <span style={{ fontSize: 13, fontWeight: 700, color: "#111827", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{d.title}</span>
                 </div>
-                <div style={{ flex: 1, minHeight: 0, background: "#fff", display: "flex", alignItems: "center", justifyContent: "center", padding: 16, overflow: "hidden" }}>
+                <div style={{ aspectRatio: "2.05", background: "#fff", display: "flex", alignItems: "center", justifyContent: "center", padding: 12, overflow: "hidden" }}>
                   {/* Public SVG render — object-fit:contain shows the whole diagram
                       (nothing clipped), scaled to fit the card. */}
                   <img src={`/svg/${d.id}`} alt={d.title} loading="lazy"
@@ -128,13 +125,14 @@ export default function LandingDemo({ sequences }: { sequences: Demo[] }) {
         }
 
         /* Desktop: 8 cards (4 x 2). iPad: 6 (3 x 2). Phone: 4 (2 x 2). */
-        /* 3 up, not 4: a compact sequence is wide and short (~2:1), so a
-           4-column grid on a viewport-height page makes portrait cards that
-           letterbox half of every tile away. 3 columns give each card roughly
-           the diagram's own aspect, so the render fills it. */
-        .ld-grid { grid-template-columns: repeat(3, 1fr); grid-auto-rows: 1fr; }
+        /* 4 up. Rows are sized to the diagram, not stretched to fill the
+           viewport: a compact sequence is ~2:1, so a stretched row makes a tall
+           card that letterboxes most of the tile away. min-content rows plus a
+           fixed aspect on the render box means the card IS the diagram's shape,
+           and align-content centres the block in whatever height is left. */
+        .ld-grid { grid-template-columns: repeat(4, 1fr); grid-auto-rows: min-content; align-content: center; }
         @media (max-width: 1024px) {
-          .ld-grid { grid-template-columns: repeat(2, 1fr); }
+          .ld-grid { grid-template-columns: repeat(3, 1fr); }
           .ld-card:nth-child(n+7) { display: none !important; }
         }
         @media (max-width: 720px) {

@@ -8,6 +8,7 @@ import { relativeTime, buildTagColorMap, TAG_PALETTE } from "@/lib/editor-logic"
 import { PAL, THEMES, stripFrontmatter, detectSequenceType, parse, buildSvg, DEFAULT_OPTS, DEFAULT_LAYOUT } from "@/lib/svg-renderer";
 import type { Opts, Layout } from "@/lib/svg-renderer";
 import { fireflies } from "./fireflies";
+import Wordmark from "./Wordmark";
 import { DEMO_IDS } from "@/lib/demo-ids";
 
 // Shape the shell passes in: NextAuth session user mapped to the fields this
@@ -1188,8 +1189,7 @@ export default function SequencesClient({ user, sequences: initial }: { user: Sh
       <header className="dc-header" style={{ background: "#ffffff", borderBottom: "1px solid #e4e6e8", height: 56, position: "sticky", top: 0, zIndex: 10 }}>
       <div style={{ maxWidth: 1600, margin: "0 auto", padding: "0 32px", height: "100%", display: "flex", alignItems: "center", gap: 20 }}>
         <div style={{ display: "flex", alignItems: "center", gap: 10, flexShrink: 0 }}>
-          <Image src="/icon-512.png" alt="Sequences" width={28} height={28} style={{ borderRadius: 8 }} />
-          <span style={{ fontSize: 14, fontWeight: 700, color: "#1c1e21", letterSpacing: "-0.01em" }}>Sequences</span>
+          <Wordmark size={32} priority />
         </div>
 
         <div style={{ flex: 1 }} />
@@ -1284,9 +1284,26 @@ export default function SequencesClient({ user, sequences: initial }: { user: Sh
                   {scope === "demo"
                     ? (demoSequences.length < DEMO_IDS.length
                         ? `${DEMO_IDS.length - demoSequences.length} of ${DEMO_IDS.length} missing`
-                        : "live at /demo")
+                        : `${demoSequences.length} live`)
                     : `${allSequences.length} diagram${allSequences.length === 1 ? "" : "s"}`}
                 </span>
+                {/* Opens the real /demo route rather than imitating it here.
+                    That page reads no session - verified byte-identical with and
+                    without a session cookie - so what opens is exactly the page
+                    a stranger gets, not a preview of it. */}
+                {scope === "demo" && (
+                  <a href="/demo" target="_blank" rel="noreferrer"
+                    title="Opens the real public page - it renders the same for everyone"
+                    style={{ display: "inline-flex", alignItems: "center", gap: 5, flexShrink: 0, textDecoration: "none",
+                      fontSize: 12, fontWeight: 700, color: "#1c1e21", background: "#ffffff",
+                      border: "1px solid #e4e6e8", borderRadius: 8, padding: "5px 11px",
+                      boxShadow: "0 1px 3px rgba(15,23,42,0.06)" }}>
+                    View as visitor
+                    <svg width={11} height={11} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5} strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6" /><polyline points="15 3 21 3 21 9" /><line x1="10" y1="14" x2="21" y2="3" />
+                    </svg>
+                  </a>
+                )}
               </div>
               <div style={{ display: "flex", alignItems: "center", gap: 10, minWidth: 0 }}>
               {/* Search */}
