@@ -27,7 +27,7 @@ export default async function Home({
   const [session, result] = await Promise.all([
     auth(),
     db.query(
-      "SELECT id, title, slug, sequence_type, created_at, updated_at, code, tags, settings->>'youtubeId' AS youtube_id FROM sequences WHERE user_id = $1 ORDER BY updated_at DESC",
+      "SELECT id, title, slug, sequence_type, created_at, updated_at, code, tags, settings, settings->>'youtubeId' AS youtube_id FROM sequences WHERE user_id = $1 ORDER BY updated_at DESC",
       [uid]
     ),
   ]);

@@ -5,7 +5,8 @@ import { signOut as nextAuthSignOut } from "next-auth/react";
 import { CuteToast, showToast } from "@/app/CuteToast";
 import { Bot, Plug, Briefcase, User as UserIcon, FlaskConical, Clipboard, GraduationCap, Lightbulb, Rocket, Star, Heart, Tag, Youtube } from "lucide-react";
 import { relativeTime, buildTagColorMap, TAG_PALETTE } from "@/lib/editor-logic";
-import { PAL, stripFrontmatter, detectSequenceType } from "@/lib/svg-renderer";
+import { PAL, THEMES, stripFrontmatter, detectSequenceType, parse, buildSvg, DEFAULT_OPTS, DEFAULT_LAYOUT } from "@/lib/svg-renderer";
+import type { Opts, Layout } from "@/lib/svg-renderer";
 import { fireflies } from "./fireflies";
 
 // Shape the shell passes in: NextAuth session user mapped to the fields this
@@ -20,6 +21,7 @@ type Sequence = {
   sequence_type: string; created_at: string; updated_at: string; code: string;
   tags: string[];
   youtube_id?: string | null;
+  settings?: { opts?: Partial<Opts>; layout?: Partial<Layout> } | null;
 };
 
 // ── Shared (public) ───────────────────────────────────────────────────────────
@@ -52,6 +54,32 @@ function lsGet(key: string): string | null {
 }
 function loadShared(): Set<string> {
   try { return new Set(JSON.parse(lsGet(LS_SHARED) ?? "[]")); } catch { return new Set(); }
+}
+
+// ── Card preview: the real diagram ───────────────────────────────────────────
+// Same renderer and same saved settings as the editor and /svg/<id>, so the
+// card shows the diagram itself, not a sketch of it. The root width/height are
+// swapped for 100% so the viewBox scales it to whatever width the card has,
+// letterboxed inside a 2:1 box on the theme's own background. Anything that is
+// not a sequenceDiagram, or fails to parse, keeps the sketch minimap.
+function SequencePreview({ d }: { d: Sequence }) {
+  const preview = useMemo(() => {
+    if (detectSequenceType(d.code) !== "sequence") return null;
+    try {
+      const parsed = parse(d.code);
+      if (!parsed.title && d.title) parsed.title = d.title;
+      const opts: Opts = { ...DEFAULT_OPTS, ...(d.settings?.opts ?? {}) };
+      const layout: Layout = { ...DEFAULT_LAYOUT, ...(d.settings?.layout ?? {}) };
+      const svg = buildSvg(parsed, opts, layout, d.created_at, { interactive: false })
+        .replace(/ width="[\d.]+" height="[\d.]+" viewBox=/, ' width="100%" height="100%" viewBox=');
+      return { svg, bg: THEMES[opts.theme]?.bg ?? "#ffffff" };
+    } catch { return null; }
+  }, [d.code, d.title, d.settings, d.created_at]);
+  if (!preview) return <SequenceMinimap code={d.code} type={d.sequence_type} />;
+  return (
+    <div style={{ width: "100%", aspectRatio: "2 / 1", borderRadius: 8, overflow: "hidden", background: preview.bg, border: "1px solid #eceef0" }}
+      dangerouslySetInnerHTML={{ __html: preview.svg }} />
+  );
 }
 
 // ── Sequence minimap ───────────────────────────────────────────────────────────
@@ -783,7 +811,7 @@ function SequenceCard({ d, isShared, onOpen, onDelete, onRename, onTag, onViewCo
       <div style={{ padding: "0 12px 13px" }}>
         {d.youtube_id
           ? <YouTubeThumb id={d.youtube_id} title={d.title} />
-          : <SequenceMinimap code={d.code} type={d.sequence_type} />}
+          : <SequencePreview d={d} />}
       </div>
 
       {/* Actions - visible on hover or keyboard focus (:focus-within), always mounted so Tab can reach them */}
