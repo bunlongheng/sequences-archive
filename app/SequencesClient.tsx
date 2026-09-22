@@ -8,6 +8,7 @@ import { relativeTime, buildTagColorMap, TAG_PALETTE } from "@/lib/editor-logic"
 import { PAL, THEMES, stripFrontmatter, detectSequenceType, parse, buildSvg, DEFAULT_OPTS, DEFAULT_LAYOUT } from "@/lib/svg-renderer";
 import type { Opts, Layout } from "@/lib/svg-renderer";
 import { fireflies } from "./fireflies";
+import { DEMO_IDS } from "@/lib/demo-ids";
 
 // Shape the shell passes in: NextAuth session user mapped to the fields this
 // component reads.
@@ -956,6 +957,9 @@ export default function SequencesClient({ user, sequences: initial }: { user: Sh
   const [codeSequence, setCodeSequence] = useState<Sequence | null>(null);
   const [codeCopied, setCodeCopied] = useState(false);
   const [activeTag, setActiveTag] = useState<string | null>(null);
+  // Scope: the owner's own library, or the curated public demo lineup.
+  const [scope, setScope] = useState<"personal" | "demo">("personal");
+
   // View mode: "grid" thumbnails by default, "list" when the browser saved it.
   // The saved value is read in an effect, not in the initializer: the server
   // has no localStorage, so an initializer that reads it renders different HTML
@@ -1123,7 +1127,14 @@ export default function SequencesClient({ user, sequences: initial }: { user: Sh
     return m;
   }, [sequences]);
 
-  const filtered = sequences.filter(d => {
+  // Demo scope: exactly the curated public lineup, in its published order, so
+  // reviewing it here is reviewing what a logged-out visitor sees at /demo.
+  const demoSequences = useMemo(() => {
+    const byId = new Map(sequences.map(d => [d.id, d]));
+    return DEMO_IDS.map(id => byId.get(id)).filter((d): d is Sequence => !!d);
+  }, [sequences]);
+
+  const filtered = (scope === "demo" ? demoSequences : sequences).filter(d => {
     if (search.trim() && !d.title.toLowerCase().includes(search.toLowerCase()) && !d.sequence_type.toLowerCase().includes(search.toLowerCase())) return false;
     if (activeTag === "__no_tag__") return (d.tags ?? []).length === 0;
     if (activeTag) return (d.tags ?? []).includes(activeTag);
@@ -1132,7 +1143,8 @@ export default function SequencesClient({ user, sequences: initial }: { user: Sh
   });
 
   const byUpdated = (a: Sequence, b: Sequence) => (b.updated_at ?? b.created_at).localeCompare(a.updated_at ?? a.created_at);
-  const allSequences = filtered.sort(byUpdated);
+  // Demo keeps its curated order; personal sorts by most recently touched.
+  const allSequences = scope === "demo" ? filtered : filtered.sort(byUpdated);
 
   const cardProps = (d: Sequence) => ({
     d, isShared: shared.has(d.id),
@@ -1254,9 +1266,28 @@ export default function SequencesClient({ user, sequences: initial }: { user: Sh
             way to clear a search that matched nothing. */}
         <section>
             <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, marginBottom: 14, position: "relative", zIndex: 1 }}>
-              <span style={{ fontSize: 12.5, color: "#8a8d91", fontWeight: 500, flexShrink: 0 }}>
-                {allSequences.length} diagram{allSequences.length === 1 ? "" : "s"}
-              </span>
+              <div style={{ display: "flex", alignItems: "center", gap: 10, minWidth: 0 }}>
+                <div style={{ display: "flex", gap: 2, background: "#eceef1", borderRadius: 9, padding: 3, flexShrink: 0 }}>
+                  {([["personal", "Personal"], ["demo", "Demo"]] as const).map(([v, label]) => {
+                    const on = scope === v;
+                    return (
+                      <button key={v} onClick={() => setScope(v)} aria-pressed={on}
+                        style={{ padding: "4px 12px", borderRadius: 7, border: "none", cursor: "pointer", fontSize: 12, fontWeight: 700, letterSpacing: "0.01em",
+                          background: on ? "#ffffff" : "transparent", color: on ? "#1c1e21" : "#9aa0a6",
+                          boxShadow: on ? "0 1px 3px rgba(0,0,0,0.14)" : "none", transition: "all 0.12s" }}>
+                        {label}{v === "demo" ? ` ${demoSequences.length}` : ""}
+                      </button>
+                    );
+                  })}
+                </div>
+                <span style={{ fontSize: 12.5, color: "#8a8d91", fontWeight: 500, flexShrink: 0 }}>
+                  {scope === "demo"
+                    ? (demoSequences.length < DEMO_IDS.length
+                        ? `${DEMO_IDS.length - demoSequences.length} of ${DEMO_IDS.length} missing`
+                        : "live at /demo")
+                    : `${allSequences.length} diagram${allSequences.length === 1 ? "" : "s"}`}
+                </span>
+              </div>
               <div style={{ display: "flex", alignItems: "center", gap: 10, minWidth: 0 }}>
               {/* Search */}
               <div className="dc-search-wrap" style={{ position: "relative", width: 300 }}>
