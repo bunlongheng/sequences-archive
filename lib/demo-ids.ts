@@ -7,6 +7,7 @@
 export const DEMO_IDS = [
   "c59940a0-0f79-4d50-a95e-65a11585a285", // Claude Code Agent Loop
   "6a2ab8a2-66f6-49ed-a79a-7dc6517c0234", // Deep Research Harness
+  "cd86b78a-2fdd-448c-b533-35a07d33375d", // Zero Trust Web Access
   "70ccb869-b242-4241-99ff-f3d1dd794f38", // Kubernetes Pod Scheduling
   "2a63fec3-c3be-46ba-9f46-a2c664d50fb2", // gRPC Bidirectional Streaming
   "bdb6782c-ccd2-4b36-ac90-c7c6acb4e668", // LLM RAG Pipeline
