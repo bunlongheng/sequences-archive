@@ -43,9 +43,9 @@ export default function LandingDemo({ sequences }: { sequences: Demo[] }) {
         <section className="ld-in" style={{ textAlign: "center", padding: "18px 0 16px" }}>
           <h1 style={{ fontSize: 34, lineHeight: 1.1, fontWeight: 800, letterSpacing: "-0.03em", color: "#0f172a", margin: "0 0 8px" }}>
             <span className="ld-flip">
-              <span>Beautiful</span>
-              <span>Clean</span>
-              <span>Elegant</span>
+              <span style={{ color: "#ef4444" }}>Beautiful</span>
+              <span style={{ color: "#ca8a04" }}>Clean</span>
+              <span style={{ color: "#16a34a" }}>Elegant</span>
             </span>{" "}Sequence Diagrams
           </h1>
           <p style={{ fontSize: 14, color: "#64748b", margin: "8px auto 0", maxWidth: 720, lineHeight: 1.45 }}>
@@ -107,7 +107,12 @@ export default function LandingDemo({ sequences }: { sequences: Demo[] }) {
         .ld-life { animation: ldFlow 48s linear infinite; }
         .ld-blob { animation: ldBlob 18s ease-in-out infinite; }
         /* Rotating word before "Sequences" — CSS-only, 6 words, ~2s each. */
-        .ld-flip { display: inline-grid; justify-items: end; vertical-align: bottom; color: #7c3aed; }
+        /* The 3 words carry the brand's own red, yellow and green - the same 3
+           the icon and the palette use - instead of 1 purple. The yellow and
+           green are 1 step darker than the palette values (#eab308, #22c55e),
+           which sit at 1.9:1 and 2.3:1 on white; these clear the 3:1 large-text
+           threshold at 3.3:1, 4.0:1 and 3.3:1 while still reading as R/Y/G. */
+        .ld-flip { display: inline-grid; justify-items: end; vertical-align: bottom; }
         .ld-flip > span { grid-area: 1 / 1; opacity: 0; white-space: nowrap; animation: ldflip 6s infinite; }
         .ld-flip > span:nth-child(1) { animation-delay: 0s; }
         .ld-flip > span:nth-child(2) { animation-delay: 2s; }
