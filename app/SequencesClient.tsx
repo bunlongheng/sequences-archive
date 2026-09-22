@@ -1092,7 +1092,14 @@ export default function SequencesClient({ user, sequences: initial }: { user: Sh
     setDeleting(null);
   }
 
-  const rawTags = useMemo(() => [...new Set(sequences.flatMap(d => d.tags ?? []))], [sequences]);
+  // A diagram on the demo lineup belongs to Demo, not Personal - otherwise the
+  // same 7 appear in both scopes and the personal count double-counts them.
+  const demoIdSet = useMemo(() => new Set<string>(DEMO_IDS), []);
+  const personalSequences = useMemo(() => sequences.filter(d => !demoIdSet.has(d.id)), [sequences, demoIdSet]);
+
+  // Tag vocabulary is personal-only: a tag on a demo diagram is not a filter
+  // the owner's library should offer.
+  const rawTags = useMemo(() => [...new Set(personalSequences.flatMap(d => d.tags ?? []))], [personalSequences]);
   const [tagOrder, setTagOrder] = useState<string[]>(() => {
     try { return JSON.parse(localStorage.getItem("tag-order") ?? "[]"); } catch { return []; }
   });
@@ -1124,9 +1131,9 @@ export default function SequencesClient({ user, sequences: initial }: { user: Sh
   const tagColorMap = useMemo(() => buildTagColorMap(allTags), [allTags]);
   const tagCounts = useMemo(() => {
     const m = new Map<string, number>();
-    sequences.forEach(d => (d.tags ?? []).forEach(t => m.set(t, (m.get(t) ?? 0) + 1)));
+    personalSequences.forEach(d => (d.tags ?? []).forEach(t => m.set(t, (m.get(t) ?? 0) + 1)));
     return m;
-  }, [sequences]);
+  }, [personalSequences]);
 
   // Demo scope: exactly the curated public lineup, in its published order, so
   // reviewing it here is reviewing what a logged-out visitor sees at /demo.
@@ -1135,8 +1142,11 @@ export default function SequencesClient({ user, sequences: initial }: { user: Sh
     return DEMO_IDS.map(id => byId.get(id)).filter((d): d is Sequence => !!d);
   }, [sequences]);
 
-  const filtered = (scope === "demo" ? demoSequences : sequences).filter(d => {
+  const filtered = (scope === "demo" ? demoSequences : personalSequences).filter(d => {
     if (search.trim() && !d.title.toLowerCase().includes(search.toLowerCase()) && !d.sequence_type.toLowerCase().includes(search.toLowerCase())) return false;
+    // Demo is the published lineup and nothing else: no tag filtering, so the
+    // scope always shows every diagram a visitor would see.
+    if (scope === "demo") return true;
     if (activeTag === "__no_tag__") return (d.tags ?? []).length === 0;
     if (activeTag) return (d.tags ?? []).includes(activeTag);
     // "All" view excludes YouTube automations - clean list; view them via the YouTube tab.
@@ -1222,14 +1232,15 @@ export default function SequencesClient({ user, sequences: initial }: { user: Sh
         </div>
       </div></header>
 
-      {/* ── Tag filter bar ── */}
-      {allTags.length > 0 && (
+      {/* ── Tag filter bar ── Demo has no concept of tags, so the bar is not
+           rendered there at all rather than rendered empty. */}
+      {scope === "personal" && allTags.length > 0 && (
         <div style={{ background: "#ffffff", borderBottom: "1px solid #e4e6e8", height: 40 }}>
         <div className="dc-filterbar" style={{ maxWidth: 1600, margin: "0 auto", padding: "0 32px", height: "100%", boxSizing: "border-box" }}>
           <div style={{ height: "100%", display: "flex", alignItems: "center", gap: 6, overflowX: "auto" }}>
           <button onClick={() => setActiveTag(null)}
             style={{ padding: "3px 12px", borderRadius: 20, fontSize: 11, fontWeight: 600, cursor: "pointer", border: `1.5px solid ${!activeTag ? "#1c1e21" : "#e4e6e8"}`, background: !activeTag ? "#1c1e21" : "#f4f5f7", color: !activeTag ? "#fff" : "#65676b", flexShrink: 0, transition: "all 0.12s", display: "flex", alignItems: "center", gap: 5 }}>
-            All <span style={{ background: !activeTag ? "rgba(255,255,255,0.25)" : "#e4e6e8", borderRadius: 20, padding: "0 5px", fontSize: 10 }}>{sequences.filter(d => !(d.tags ?? []).includes("YouTube")).length}</span>
+            All <span style={{ background: !activeTag ? "rgba(255,255,255,0.25)" : "#e4e6e8", borderRadius: 20, padding: "0 5px", fontSize: 10 }}>{personalSequences.filter(d => !(d.tags ?? []).includes("YouTube")).length}</span>
           </button>
           {allTags.map(t => { const s = tagColorMap.get(t)!; const active = activeTag === t; const count = tagCounts.get(t) ?? 0; return (
             <button key={t} onClick={() => setActiveTag(active ? null : t)}
@@ -1242,7 +1253,7 @@ export default function SequencesClient({ user, sequences: initial }: { user: Sh
           <button onClick={() => setActiveTag(activeTag === "__no_tag__" ? null : "__no_tag__")}
             style={{ padding: "3px 10px 3px 7px", borderRadius: 20, fontSize: 11, fontWeight: 600, cursor: "pointer", border: `1.5px solid #d1d5db`, background: activeTag === "__no_tag__" ? "#d1d5db" : "#fff", color: "#65676b", flexShrink: 0, transition: "all 0.15s", display: "flex", alignItems: "center", gap: 4 }}>
             <Tag size={10} strokeWidth={2.5} style={{ flexShrink: 0 }} />
-            No Tag <span style={{ background: activeTag === "__no_tag__" ? "rgba(255,255,255,0.25)" : "#e4e6e8", borderRadius: 20, padding: "0 5px", fontSize: 10 }}>{sequences.filter(d => (d.tags ?? []).length === 0).length}</span>
+            No Tag <span style={{ background: activeTag === "__no_tag__" ? "rgba(255,255,255,0.25)" : "#e4e6e8", borderRadius: 20, padding: "0 5px", fontSize: 10 }}>{personalSequences.filter(d => (d.tags ?? []).length === 0).length}</span>
           </button>
           </div>
         </div></div>
