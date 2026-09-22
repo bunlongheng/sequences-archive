@@ -89,6 +89,59 @@ function IconBtn({ active, onClick, accent = "#0a84ff", inactiveBg = "#2a2a2c", 
 
 
 // ── Settings content (shared between desktop panel + mobile sheet) ─────────────
+// ── Switch - 1 toggle used by every row in the panel ─────────────────────────
+// The knob overshoots slightly on the way out (the cubic-bezier below) so the
+// control feels sprung rather than linear, and the track keeps a hairline inset
+// so an "off" switch still reads as a recessed slot instead of a flat pill.
+function Switch({ on, ut, size = "md" }: { on: boolean; ut: UiTheme; size?: "md" | "sm" }) {
+    const W = size === "md" ? 36 : 32, H = size === "md" ? 21 : 18;
+    const K = H - 5, PAD = 2.5;
+    return (
+        <div style={{
+            position: "relative", width: W, height: H, borderRadius: H / 2, flexShrink: 0,
+            background: on ? ut.toggleOn : ut.tabBarBg,
+            boxShadow: on ? `0 0 0 1px ${ut.toggleOn}, 0 1px 3px ${ut.toggleOn}55` : `inset 0 0 0 1px ${ut.panelBorder}, inset 0 1px 2px rgba(0,0,0,0.06)`,
+            transition: "background 0.22s cubic-bezier(0.4,0,0.2,1), box-shadow 0.22s",
+        }}>
+            <div style={{
+                position: "absolute", top: PAD, left: on ? W - K - PAD : PAD, width: K, height: K, borderRadius: K / 2,
+                background: "#ffffff", boxShadow: "0 1px 2px rgba(0,0,0,0.25), 0 0 0 0.5px rgba(0,0,0,0.04)",
+                transition: "left 0.28s cubic-bezier(0.34,1.4,0.64,1)",
+            }} />
+        </div>
+    );
+}
+
+// ── ThemeSwatch - a miniature of the diagram, drawn in that theme ────────────
+// 3 coloured dots said nothing about what the theme does. This draws the real
+// thing in miniature: participant chips, lifelines and a message pill on the
+// theme's own background, so the choice is previewed rather than labelled.
+const THEME_SWATCHES = [
+    { key: "light",   label: "Light",   bg: "#ffffff", cols: ["#ef4444", "#3b82f6", "#22c55e"], line: "#94a3b8", pill: "#ffffff", pillStroke: "#cbd5e1" },
+    { key: "dark",    label: "Dark",    bg: "#16161e", cols: ["#a78bfa", "#60a5fa", "#34d399"], line: "#414868", pill: "#16161e", pillStroke: "#414868" },
+    { key: "monokai", label: "Monokai", bg: "#272822", cols: ["#f92672", "#a6e22e", "#e6db74"], line: "#75715e", pill: "#272822", pillStroke: "#75715e" },
+] as const;
+
+function ThemeSwatch({ t }: { t: typeof THEME_SWATCHES[number] }) {
+    const xs = [13, 36, 59];
+    return (
+        <svg viewBox="0 0 72 42" style={{ width: "100%", height: 40, display: "block" }} aria-hidden>
+            <rect width="72" height="42" fill={t.bg} />
+            {xs.map((x, i) => (
+                <g key={x}>
+                    <line x1={x} y1={13} x2={x} y2={37} stroke={t.cols[i]} strokeWidth={0.7} opacity={0.4} />
+                    <rect x={x - 9} y={5} width={18} height={7} rx={2} fill={t.cols[i]} />
+                </g>
+            ))}
+            <line x1={xs[0]} y1={21} x2={xs[1]} y2={21} stroke={t.cols[0]} strokeWidth={0.9} />
+            <polygon points={`${xs[1]},21 ${xs[1] - 3},19.6 ${xs[1] - 3},22.4`} fill={t.cols[0]} />
+            <rect x={xs[0] + 4} y={18} width={16} height={6} rx={3} fill={t.pill} stroke={t.pillStroke} strokeWidth={0.6} />
+            <line x1={xs[1]} y1={31} x2={xs[2]} y2={31} stroke={t.cols[1]} strokeWidth={0.9} strokeDasharray="2 1.6" />
+            <polygon points={`${xs[2]},31 ${xs[2] - 3},29.6 ${xs[2] - 3},32.4`} fill={t.cols[1]} />
+        </svg>
+    );
+}
+
 export function SettingsContent({
     opts, layout, copied, copiedLink, copiedSvg, copiedShare, mobile = false, participants = [], isSequence = true,
     upd, updL, exportPng, exportSvg, copySvg, exportCode, exportJson, copyCode, copyLink, share, viewUrl, tab, setTab, selectedPid, onAutoIcons,
@@ -110,6 +163,17 @@ export function SettingsContent({
 
     return (
         <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+            <style>{`
+                .sq-theme { position: relative; padding: 0; border-radius: 10px; background: transparent; cursor: pointer; border: none; overflow: visible; -webkit-tap-highlight-color: transparent; }
+                .sq-theme .sq-theme-frame { border-radius: 9px; overflow: hidden; transition: transform 0.18s cubic-bezier(0.34,1.3,0.64,1), box-shadow 0.18s; }
+                .sq-theme:hover .sq-theme-frame { transform: translateY(-1.5px); }
+                .sq-theme:focus-visible { outline: none; }
+                .sq-theme:focus-visible .sq-theme-frame { box-shadow: 0 0 0 2px ${ut.accent}66; }
+                .sq-row { display: flex; align-items: center; justify-content: space-between; cursor: pointer; user-select: none; border-radius: 7px; padding: 3px 6px; margin: 0 -6px; transition: background 0.14s; }
+                .sq-row:hover { background: ${ut.tabBarBg}; }
+                .sq-row:focus-visible { outline: none; box-shadow: 0 0 0 2px ${ut.accent}55; }
+                .sq-row:active .sq-knob { width: 20px; }
+            `}</style>
 
             {/* Tabs */}
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 3, background: ut.tabBarBg, borderRadius: 8, padding: 2 }}>
@@ -128,23 +192,29 @@ export function SettingsContent({
                 {/* Theme */}
                 <div>
                     <div style={{ fontSize: fs(9), fontWeight: 700, color: ut.sectionLabel, textTransform: "uppercase", letterSpacing: "0.1em", marginBottom: 6 }}>Theme</div>
-                    <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 5 }}>
-                        {([
-                            ["light",   "Light",   "#ffffff", "#1e293b", ["#e879f9","#38bdf8","#34d399"]],
-                            ["dark",    "Dark",    "#0f1117", "#e2e8f0", ["#a78bfa","#60a5fa","#34d399"]],
-                            ["monokai", "Monokai", "#272822", "#f8f8f2", ["#f92672","#a6e22e","#e6db74"]],
-                        ] as const).map(([t, label, bg, fg, dots]) => {
-                            const active = opts.theme === t;
+                    <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 7 }}>
+                        {THEME_SWATCHES.map(t => {
+                            const active = opts.theme === t.key;
                             return (
-                                <button key={t} onClick={() => upd({ theme: t })} style={{
-                                    padding: 0, borderRadius: 8, border: active ? "1.5px solid #3b82f6" : "1.5px solid transparent",
-                                    background: "transparent", cursor: "pointer", display: "flex", flexDirection: "column", alignItems: "center", gap: 4, overflow: "hidden",
-                                }}>
-                                    {/* Swatch */}
-                                    <div style={{ width: "100%", height: 32, borderRadius: 6, background: bg, display: "flex", alignItems: "center", justifyContent: "center", gap: 4, flexShrink: 0, border: `1px solid ${active ? "#3b82f6" : ut.panelBorder}` }}>
-                                        {dots.map((c, i) => <div key={i} style={{ width: 7, height: 7, borderRadius: "50%", background: c }} />)}
+                                <button key={t.key} className="sq-theme" onClick={() => upd({ theme: t.key })}
+                                    aria-label={`${t.label} theme`} aria-pressed={active} title={t.label}>
+                                    <div className="sq-theme-frame" style={{
+                                        boxShadow: active
+                                            ? `0 0 0 2px ${ut.accent}, 0 3px 10px ${ut.accent}33`
+                                            : `0 0 0 1px ${ut.panelBorder}`,
+                                    }}>
+                                        <ThemeSwatch t={t} />
                                     </div>
-                                    <span style={{ fontSize: fs(9), fontWeight: 700, color: active ? ut.accent : ut.inactiveTabText, paddingBottom: 3 }}>{label}</span>
+                                    {active && (
+                                        <div style={{
+                                            position: "absolute", top: -5, right: -5, width: 15, height: 15, borderRadius: "50%",
+                                            background: ut.accent, display: "flex", alignItems: "center", justifyContent: "center",
+                                            boxShadow: `0 1px 4px ${ut.accent}66`,
+                                        }}>
+                                            <svg width={9} height={9} viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth={3.5} strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12" /></svg>
+                                        </div>
+                                    )}
+                                    <span style={{ display: "block", marginTop: 5, fontSize: fs(9), fontWeight: 700, letterSpacing: "0.01em", color: active ? ut.accent : ut.inactiveTabText, transition: "color 0.15s" }}>{t.label}</span>
                                 </button>
                             );
                         })}
@@ -159,14 +229,12 @@ export function SettingsContent({
                         <div style={{ fontSize: fs(9), fontWeight: 700, color: ut.sectionLabel, textTransform: "uppercase", letterSpacing: "0.1em", marginBottom: 7 }}>Style</div>
                         <div style={{ display: "flex", flexDirection: "column", gap: mobile ? 10 : 7 }}>
                             {([ ["coloredLines","Line Colors"], ["coloredNumbers","Numbers"], ["coloredText","Text Pill"], ["showNotes","Notes"] ] as const).map(([k, label]) => (
-                                <div key={k} className="flex items-center justify-between cursor-pointer select-none"
+                                <div key={k} className="sq-row"
                                     role="button" tabIndex={0} aria-label={`Toggle ${label}`} aria-pressed={!!opts[k]}
                                     onClick={() => upd({ [k]: !opts[k] } as Partial<Opts>)}
                                     onKeyDown={e => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); upd({ [k]: !opts[k] } as Partial<Opts>); } }}>
-                                    <span style={{ fontSize: fs(11), color: ut.bodyText, fontWeight: 400 }}>{label}</span>
-                                    <div style={{ position: "relative", width: 34, height: 20, borderRadius: 10, flexShrink: 0, background: opts[k] ? ut.toggleOn : ut.tabBarBg, transition: "background 0.2s", cursor: "pointer" }}>
-                                        <div style={{ position: "absolute", top: 2, width: 16, height: 16, borderRadius: 8, background: "white", left: opts[k] ? 16 : 2, transition: "left 0.2s ease", boxShadow: "0 1px 4px rgba(0,0,0,0.4)" }} />
-                                    </div>
+                                    <span style={{ fontSize: fs(11), color: opts[k] ? ut.bodyText : ut.inactiveTabText, fontWeight: 500, transition: "color 0.15s" }}>{label}</span>
+                                    <Switch on={!!opts[k]} ut={ut} />
                                 </div>
                             ))}
                         </div>
@@ -181,10 +249,8 @@ export function SettingsContent({
                                 role="button" tabIndex={0} aria-label="Toggle auto layout" aria-pressed={!!opts.autoLayout}
                                 onClick={() => upd({ autoLayout: !opts.autoLayout })}
                                 onKeyDown={e => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); upd({ autoLayout: !opts.autoLayout }); } }}>
-                                <span style={{ fontSize: fs(10), fontWeight: 600, color: opts.autoLayout ? ut.toggleOn : ut.sectionLabel, transition: "color 0.15s" }}>Auto</span>
-                                <div style={{ position: "relative", width: 32, height: 18, borderRadius: 9, background: opts.autoLayout ? ut.toggleOn : ut.panelBorder, transition: "background 0.2s" }}>
-                                    <div style={{ position: "absolute", top: 2, left: opts.autoLayout ? 16 : 2, width: 14, height: 14, borderRadius: 7, background: "white", transition: "left 0.2s", boxShadow: "0 1px 3px rgba(0,0,0,0.3)" }} />
-                                </div>
+                                <span style={{ fontSize: fs(10), fontWeight: 700, letterSpacing: "0.02em", color: opts.autoLayout ? ut.toggleOn : ut.sectionLabel, transition: "color 0.15s" }}>Auto</span>
+                                <Switch on={!!opts.autoLayout} ut={ut} size="sm" />
                             </div>
                         </div>
                         {!opts.autoLayout && <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>

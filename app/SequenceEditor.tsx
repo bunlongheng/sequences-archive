@@ -370,7 +370,13 @@ export default function SequenceEditor() {
                 if (typeof d?.is_public === "boolean") setIsSharedDiagram(d.is_public);
                 if (d?.created_at) setDiagramCreatedAt(d.created_at);
                 if (d?.title) setDiagramDbTitle(d.title);
-                if (d?.settings?.opts) setOpts(o => ({ ...o, ...d.settings.opts }));
+                // Open compact: the saved layout may predate the current auto
+                // layout, or have been hand-tuned for a diagram that has since
+                // changed. autoLayout is forced on for the session only - the
+                // saved values stay in the row, so turning Auto off restores
+                // exactly what was stored. The initial fitZoom then frames it.
+                if (d?.settings?.opts) setOpts(o => ({ ...o, ...d.settings.opts, autoLayout: true }));
+                else setOpts(o => ({ ...o, autoLayout: true }));
                 if (d?.settings?.layout) setLayout(l => ({ ...l, ...d.settings.layout }));
                 setDiagramLoading(false);
                 if (isImported) setTimeout(fireConfetti, 400);
@@ -486,14 +492,18 @@ export default function SequenceEditor() {
         const { clientWidth: cw, clientHeight: ch } = canvasRef.current;
         const fitW = (cw - 48) / svgDims.w;
         const fitH = (ch - 48) / svgDims.h;
-        // Wide sequences (gitGraph, gantt, timeline): fit to height, pan horizontally
-        const wide = svgDims.w > svgDims.h * 2.5;
+        // Wide MERMAID diagrams (gitGraph, gantt, timeline): fit to height and
+        // let the canvas pan horizontally. A sequence is never treated that way
+        // - compact layout makes an ordinary sequence wide and short, and the
+        // height-fit branch then zoomed past 1.5x and pushed the right-hand
+        // participants off screen on load.
+        const wide = !isSequence && svgDims.w > svgDims.h * 2.5;
         const newZoom = parseFloat((wide ? Math.min(fitH, 1.5) : Math.min(fitW, fitH)).toFixed(3));
         zoomRef.current = newZoom;
         panRef.current = { x: 0, y: 0 };
         applyTransform(panRef.current, zoomRef.current);
         setZoom(newZoom); setPanX(0); setPanY(0); setFitActive(true);
-    }, [svgDims, applyTransform]);
+    }, [svgDims, isSequence, applyTransform]);
 
     useEffect(() => {
         if (svgDims && !hasFit) {

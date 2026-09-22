@@ -26,7 +26,7 @@ type Sequence = {
 
 // ── Shared (public) ───────────────────────────────────────────────────────────
 const LS_SHARED = "sequence:shared";
-const LS_VIEW = "sequence:view"; // "list" (default) | "grid"
+const LS_VIEW = "sequence:view"; // "grid" (default, thumbnails) | "list"
 
 // These keys were renamed with the app (diagram* -> sequence*). A browser that
 // used the app before the rename still holds its values under the old names, so
@@ -62,8 +62,15 @@ function loadShared(): Set<string> {
 // swapped for 100% so the viewBox scales it to whatever width the card has,
 // letterboxed inside a 2:1 box on the theme's own background. Anything that is
 // not a sequenceDiagram, or fails to parse, keeps the sketch minimap.
+// Previews render after mount, never during SSR. buildSvg stamps the diagram
+// with a locale-formatted created_at, and the server is UTC while the browser
+// is not, so a server-rendered preview is a guaranteed hydration mismatch in
+// production. Rendering client-side also keeps ~6 MB of SVG out of the HTML.
 function useSequenceSvg(d: Sequence) {
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => { setMounted(true); }, []);
   return useMemo(() => {
+    if (!mounted) return null;
     if (detectSequenceType(d.code) !== "sequence") return null;
     try {
       const parsed = parse(d.code);
@@ -74,7 +81,7 @@ function useSequenceSvg(d: Sequence) {
         .replace(/ width="[\d.]+" height="[\d.]+" viewBox=/, ' width="100%" height="100%" viewBox=');
       return { svg, bg: THEMES[opts.theme]?.bg ?? "#ffffff" };
     } catch { return null; }
-  }, [d.code, d.title, d.settings, d.created_at]);
+  }, [mounted, d.code, d.title, d.settings, d.created_at]);
 }
 
 function SequencePreview({ d }: { d: Sequence }) {
@@ -949,11 +956,13 @@ export default function SequencesClient({ user, sequences: initial }: { user: Sh
   const [codeSequence, setCodeSequence] = useState<Sequence | null>(null);
   const [codeCopied, setCodeCopied] = useState(false);
   const [activeTag, setActiveTag] = useState<string | null>(null);
-  // View mode: "list" (default) vs "grid" thumbnails. Persisted per browser.
-  const [view, setView] = useState<"list" | "grid">(() => {
-    if (typeof window === "undefined") return "list";
-    return lsGet(LS_VIEW) === "grid" ? "grid" : "list";
-  });
+  // View mode: "grid" thumbnails by default, "list" when the browser saved it.
+  // The saved value is read in an effect, not in the initializer: the server
+  // has no localStorage, so an initializer that reads it renders different HTML
+  // on the 2 sides and React discards the tree (this was the standing hydration
+  // error on the index). Start at the default on both sides, then correct.
+  const [view, setView] = useState<"list" | "grid">("grid");
+  useEffect(() => { if (lsGet(LS_VIEW) === "list") setView("list"); }, []);
   const changeView = (v: "list" | "grid") => { setView(v); try { localStorage.setItem(LS_VIEW, v); } catch {} };
   const menuRef = useRef<HTMLDivElement>(null);
 
@@ -1171,16 +1180,6 @@ export default function SequencesClient({ user, sequences: initial }: { user: Sh
           <span style={{ fontSize: 14, fontWeight: 700, color: "#1c1e21", letterSpacing: "-0.01em" }}>Sequences</span>
         </div>
 
-        {/* Search */}
-        <div className="dc-search-wrap" style={{ position: "relative", width: 260 }}>
-          <svg style={{ position: "absolute", left: 12, top: "50%", transform: "translateY(-50%)", color: "#8a8d91" }} width={13} height={13} viewBox="0 0 20 20" fill="none">
-            <circle cx={9} cy={9} r={6} stroke="currentColor" strokeWidth={1.8} />
-            <path d="M14 14l3 3" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" />
-          </svg>
-          <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search…"
-            style={{ width: "100%", padding: "7px 14px 7px 32px", boxSizing: "border-box", border: "1px solid #e4e6e8", borderRadius: 8, fontSize: 13, outline: "none", fontFamily: "inherit", color: "#1c1e21", background: "#f4f5f7" }} />
-        </div>
-
         <div style={{ flex: 1 }} />
 
         {/* Avatar */}
@@ -1241,7 +1240,7 @@ export default function SequencesClient({ user, sequences: initial }: { user: Sh
       <main className="dc-main" style={{ padding: "32px 32px 100px", maxWidth: 1600, margin: "0 auto" }}>
 
         {filtered.length === 0 && (
-          <div style={{ position: "fixed", inset: 0, top: 56, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", pointerEvents: "none", background: "#f4f5f7" }}>
+          <div style={{ position: "fixed", inset: 0, top: 56, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", pointerEvents: "none", background: "#f4f5f7", zIndex: 0 }}>
             <div style={{ width: 48, height: 48, borderRadius: 12, background: "#e4e6e8", display: "flex", alignItems: "center", justifyContent: "center", marginBottom: 16 }}>
               <svg width={22} height={22} viewBox="0 0 24 24" fill="none" stroke="#8a8d91" strokeWidth={1.5} strokeLinecap="round"><rect x="3" y="3" width="18" height="18" rx="3"/><line x1="9" y1="9" x2="15" y2="9"/><line x1="9" y1="13" x2="13" y2="13"/></svg>
             </div>
@@ -1250,14 +1249,25 @@ export default function SequencesClient({ user, sequences: initial }: { user: Sh
           </div>
         )}
 
-        {allSequences.length > 0 && (
-          <section>
-            {/* Toolbar: count + list/grid toggle */}
-            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 14 }}>
-              <span style={{ fontSize: 12.5, color: "#8a8d91", fontWeight: 500 }}>
+        {/* Toolbar: count + search + list/grid toggle. Rendered even with 0
+            results - the search box lives here now, so hiding it would leave no
+            way to clear a search that matched nothing. */}
+        <section>
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, marginBottom: 14, position: "relative", zIndex: 1 }}>
+              <span style={{ fontSize: 12.5, color: "#8a8d91", fontWeight: 500, flexShrink: 0 }}>
                 {allSequences.length} diagram{allSequences.length === 1 ? "" : "s"}
               </span>
-              <div style={{ display: "flex", gap: 2, background: "#eceef1", borderRadius: 9, padding: 3 }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 10, minWidth: 0 }}>
+              {/* Search */}
+              <div className="dc-search-wrap" style={{ position: "relative", width: 300 }}>
+                <svg style={{ position: "absolute", left: 12, top: "50%", transform: "translateY(-50%)", color: "#8a8d91" }} width={13} height={13} viewBox="0 0 20 20" fill="none">
+                  <circle cx={9} cy={9} r={6} stroke="currentColor" strokeWidth={1.8} />
+                  <path d="M14 14l3 3" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" />
+                </svg>
+                <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search…"
+                  style={{ width: "100%", padding: "7px 14px 7px 32px", boxSizing: "border-box", border: "1px solid #e4e6e8", borderRadius: 8, fontSize: 13, outline: "none", fontFamily: "inherit", color: "#1c1e21", background: "#ffffff" }} />
+              </div>
+              <div style={{ display: "flex", gap: 2, background: "#eceef1", borderRadius: 9, padding: 3, flexShrink: 0 }}>
                 {([
                   ["list", "List view", <svg key="l" width={15} height={15} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><circle cx="3.5" cy="6" r="1.2" fill="currentColor" stroke="none"/><circle cx="3.5" cy="12" r="1.2" fill="currentColor" stroke="none"/><circle cx="3.5" cy="18" r="1.2" fill="currentColor" stroke="none"/></svg>],
                   ["grid", "Thumbnail view", <svg key="g" width={15} height={15} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/></svg>],
@@ -1271,9 +1281,10 @@ export default function SequencesClient({ user, sequences: initial }: { user: Sh
                   );
                 })}
               </div>
+              </div>
             </div>
 
-            {view === "grid" ? (
+            {allSequences.length > 0 && (view === "grid" ? (
               <div className="dc-grid" style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(200px, 1fr))", gap: 12 }}>
                 {allSequences.map(d => <SequenceCard key={d.id} {...cardProps(d)} />)}
               </div>
@@ -1281,9 +1292,8 @@ export default function SequencesClient({ user, sequences: initial }: { user: Sh
               <div style={{ background: "#ffffff", border: "1px solid #e4e6e8", borderRadius: 12, overflow: "hidden", boxShadow: "0 1px 3px rgba(15,23,42,0.05)" }}>
                 {allSequences.map(d => <DiagramRow key={d.id} {...cardProps(d)} />)}
               </div>
-            )}
-          </section>
-        )}
+            ))}
+        </section>
       </main>
 
       {/* ── FAB ── */}
