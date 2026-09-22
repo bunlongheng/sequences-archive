@@ -28,6 +28,11 @@ type Sequence = {
 
 // ── Shared (public) ───────────────────────────────────────────────────────────
 const LS_SHARED = "sequence:shared";
+// How many previews are rendered up front, before mount. 12 covers 3 rows of
+// the 4-across grid on a desktop screen, so nothing visible arrives as a
+// placeholder that later swaps.
+const EAGER_PREVIEWS = 12;
+
 const LS_VIEW = "sequence:view"; // "grid" (default, thumbnails) | "list"
 
 // These keys were renamed with the app (diagram* -> sequence*). A browser that
@@ -64,15 +69,21 @@ function loadShared(): Set<string> {
 // swapped for 100% so the viewBox scales it to whatever width the card has,
 // letterboxed inside a 2:1 box on the theme's own background. Anything that is
 // not a sequenceDiagram, or fails to parse, keeps the sketch minimap.
-// Previews render after mount, never during SSR. buildSvg stamps the diagram
-// with a locale-formatted created_at, and the server is UTC while the browser
-// is not, so a server-rendered preview is a guaranteed hydration mismatch in
-// production. Rendering client-side also keeps ~6 MB of SVG out of the HTML.
-function useSequenceSvg(d: Sequence) {
-  const [mounted, setMounted] = useState(false);
-  useEffect(() => { setMounted(true); }, []);
-  return useMemo(() => {
-    if (!mounted) return null;
+// Previews render with titleBlock: false, which drops the locale-formatted
+// created_at - the one thing in the SVG that differed between a UTC server and
+// the viewer's browser. Verified byte-identical across timezones, so the first
+// screenful can be server-rendered: it is in the HTML, correct on first paint,
+// with no swap from a placeholder.
+//
+// Everything past that screenful waits for mount, which keeps the HTML small on
+// a library of 180. `eager` decides which side of that line a preview is on.
+// The return is 3-state: "pending" (not rendered yet), null (cannot render this
+// type), or the markup.
+function useSequenceSvg(d: Sequence, eager: boolean) {
+  const [ready, setReady] = useState(eager);
+  useEffect(() => { if (!ready) setReady(true); }, [ready]);
+  return useMemo((): { svg: string; bg: string } | null | "pending" => {
+    if (!ready) return "pending";
     if (detectSequenceType(d.code) !== "sequence") return null;
     try {
       const parsed = parse(d.code);
@@ -83,11 +94,14 @@ function useSequenceSvg(d: Sequence) {
         .replace(/ width="[\d.]+" height="[\d.]+" viewBox=/, ' width="100%" height="100%" viewBox=');
       return { svg, bg: THEMES[opts.theme]?.bg ?? "#ffffff" };
     } catch { return null; }
-  }, [mounted, d.code, d.title, d.settings, d.created_at]);
+  }, [ready, d.code, d.title, d.settings, d.created_at]);
 }
 
-function SequencePreview({ d }: { d: Sequence }) {
-  const preview = useSequenceSvg(d);
+function SequencePreview({ d, eager }: { d: Sequence; eager: boolean }) {
+  const preview = useSequenceSvg(d, eager);
+  // A pending preview holds its space quietly instead of drawing the sketch and
+  // then swapping - that swap is what read as the wrong icon glitching.
+  if (preview === "pending") return <div style={{ width: "100%", aspectRatio: "2 / 1", borderRadius: 8, background: "#fafbfc", border: "1px solid #eceef0" }} />;
   if (!preview) return <SequenceMinimap code={d.code} type={d.sequence_type} />;
   return (
     <div style={{ width: "100%", aspectRatio: "2 / 1", borderRadius: 8, overflow: "hidden", background: preview.bg, border: "1px solid #eceef0" }}
@@ -98,9 +112,10 @@ function SequencePreview({ d }: { d: Sequence }) {
 // Row thumbnail: the same render at tile size. Too small to read, but the shape
 // of a diagram is recognizable and it is the diagram, not a letter. A
 // non-sequence falls back to the coloured letter tile the rows always had.
-function SequenceRowThumb({ d }: { d: Sequence }) {
-  const preview = useSequenceSvg(d);
+function SequenceRowThumb({ d, eager }: { d: Sequence; eager: boolean }) {
+  const preview = useSequenceSvg(d, eager);
   const c = colorFor(d.title || "");
+  if (preview === "pending") return <div style={{ width: 92, height: 50, borderRadius: 8, background: "#fafbfc", border: "1px solid #eceef0", flexShrink: 0 }} />;
   if (!preview) return (
     <div style={{ width: 92, height: 50, borderRadius: 8, background: tint(c, 0.14), border: `1px solid ${tint(c, 0.28)}`, color: c, fontSize: 14, fontWeight: 800, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
       {letterFor(d.title || "")}
@@ -779,10 +794,10 @@ function RenameModal({ title, onSave, onClose }: { title: string; onSave: (t: st
 }
 
 // ── Card ──────────────────────────────────────────────────────────────────────
-function SequenceCard({ d, isShared, onOpen, onDelete, onRename, onTag, onViewCode, deleting, tagColorMap, isNew, showTags }: {
+function SequenceCard({ d, isShared, onOpen, onDelete, onRename, onTag, onViewCode, deleting, tagColorMap, isNew, showTags, eager }: {
   d: Sequence; isShared: boolean;
   onOpen: () => void; onDelete: () => void; onRename: () => void; onTag: () => void; onViewCode: () => void;
-  deleting: boolean; tagColorMap: Map<string, typeof TAG_PALETTE[0]>; isNew: boolean; showTags: boolean;
+  deleting: boolean; tagColorMap: Map<string, typeof TAG_PALETTE[0]>; isNew: boolean; showTags: boolean; eager: boolean;
 }) {
   const tags = d.tags ?? [];
 
@@ -842,7 +857,7 @@ function SequenceCard({ d, isShared, onOpen, onDelete, onRename, onTag, onViewCo
       <div style={{ padding: "0 12px 13px" }}>
         {d.youtube_id
           ? <YouTubeThumb id={d.youtube_id} title={d.title} />
-          : <SequencePreview d={d} />}
+          : <SequencePreview d={d} eager={eager} />}
       </div>
 
       {/* Actions - visible on hover or keyboard focus (:focus-within), always mounted so Tab can reach them */}
@@ -885,10 +900,10 @@ const LETTER_COLORS = ["#ef4444", "#f97316", "#eab308", "#22c55e", "#14b8a6", "#
 function letterFor(title: string) { const m = (title || "").match(/[a-z0-9]/i); return m ? m[0].toUpperCase() : "#"; }
 function colorFor(title: string) { let h = 0; for (let i = 0; i < title.length; i++) h = (Math.imul(h, 31) + title.charCodeAt(i)) >>> 0; return LETTER_COLORS[h % LETTER_COLORS.length]; }
 function tint(hex: string, a: number) { const n = parseInt(hex.slice(1), 16); return `rgba(${(n >> 16) & 255},${(n >> 8) & 255},${n & 255},${a})`; }
-function DiagramRow({ d, isShared, onOpen, onDelete, onRename, onTag, onViewCode, deleting, tagColorMap, isNew, showTags }: {
+function DiagramRow({ d, isShared, onOpen, onDelete, onRename, onTag, onViewCode, deleting, tagColorMap, isNew, showTags, eager }: {
   d: Sequence; isShared: boolean;
   onOpen: () => void; onDelete: () => void; onRename: () => void; onTag: () => void; onViewCode: () => void;
-  deleting: boolean; tagColorMap: Map<string, typeof TAG_PALETTE[0]>; isNew: boolean; showTags: boolean;
+  deleting: boolean; tagColorMap: Map<string, typeof TAG_PALETTE[0]>; isNew: boolean; showTags: boolean; eager: boolean;
 }) {
   const tags = d.tags ?? [];
   return (
@@ -898,7 +913,7 @@ function DiagramRow({ d, isShared, onOpen, onDelete, onRename, onTag, onViewCode
       onKeyDown={e => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); onOpen(); } }}
       style={{ display: "flex", alignItems: "center", gap: 12, padding: "9px 14px", borderBottom: "1px solid #eef0f2", cursor: "pointer", background: isNew ? "#f5f3ff" : undefined }}>
       {/* The diagram itself at tile size; a letter tile when it is not a sequence */}
-      <SequenceRowThumb d={d} />
+      <SequenceRowThumb d={d} eager={eager} />
       {/* Title + meta (tiered) */}
       <div style={{ minWidth: 0, flex: 1 }}>
         <div style={{ fontSize: 13.5, fontWeight: 600, color: "#1c1e21", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{d.title}</div>
@@ -1368,11 +1383,13 @@ export default function SequencesClient({ user, sequences: initial }: { user: Sh
 
             {allSequences.length > 0 && (view === "grid" ? (
               <div className="dc-grid" style={{ display: "grid", gap: 14 }}>
-                {allSequences.map(d => <SequenceCard key={d.id} {...cardProps(d)} />)}
+                {/* The first screenful renders server-side; the rest fill in after
+                    mount, so a 180-diagram library does not ship as one huge page. */}
+                {allSequences.map((d, i) => <SequenceCard key={d.id} {...cardProps(d)} eager={i < EAGER_PREVIEWS} />)}
               </div>
             ) : (
               <div style={{ background: "#ffffff", border: "1px solid #e4e6e8", borderRadius: 12, overflow: "hidden", boxShadow: "0 1px 3px rgba(15,23,42,0.05)" }}>
-                {allSequences.map(d => <DiagramRow key={d.id} {...cardProps(d)} />)}
+                {allSequences.map((d, i) => <DiagramRow key={d.id} {...cardProps(d)} eager={i < EAGER_PREVIEWS} />)}
               </div>
             ))}
         </section>
