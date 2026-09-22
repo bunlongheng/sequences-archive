@@ -128,9 +128,13 @@ export default function LandingDemo({ sequences }: { sequences: Demo[] }) {
         }
 
         /* Desktop: 8 cards (4 x 2). iPad: 6 (3 x 2). Phone: 4 (2 x 2). */
-        .ld-grid { grid-template-columns: repeat(4, 1fr); grid-auto-rows: 1fr; }
+        /* 3 up, not 4: a compact sequence is wide and short (~2:1), so a
+           4-column grid on a viewport-height page makes portrait cards that
+           letterbox half of every tile away. 3 columns give each card roughly
+           the diagram's own aspect, so the render fills it. */
+        .ld-grid { grid-template-columns: repeat(3, 1fr); grid-auto-rows: 1fr; }
         @media (max-width: 1024px) {
-          .ld-grid { grid-template-columns: repeat(3, 1fr); }
+          .ld-grid { grid-template-columns: repeat(2, 1fr); }
           .ld-card:nth-child(n+7) { display: none !important; }
         }
         @media (max-width: 720px) {

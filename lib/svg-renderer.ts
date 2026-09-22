@@ -11,7 +11,7 @@ export interface Layout { stepHeight: number; boxWidth: number; spacing: number;
 export const DEFAULT_OPTS: Opts = { coloredLines: true, coloredNumbers: true, coloredText: true, showNotes: false, font: "Roboto", lifelineDash: "solid", theme: "light", iconMode: "icons", icons: {}, boxOverlay: "gloss", autoLayout: true, labelOverrides: {}, colorOverrides: {} };
 export const DEFAULT_LAYOUT: Layout = { stepHeight: 34, boxWidth: 141, spacing: 250, textSize: 13, margin: 80, vPad: 0 };
 
-export { parse, buildSvg, esc, PAL, PAL_MONOKAI, THEMES, ICON_NODES, guessIconKey, assignIconKeys, renderIcon, detectSequenceType, DEFAULT_DIAGRAM_TITLE, LIFELINE_DASH, DIAGRAM_TYPES, stripFrontmatter };
+export { parse, buildSvg, esc, PAL, PAL_MONOKAI, THEMES, ICON_NODES, guessIconKey, assignIconKeys, renderIcon, computeAutoLayout, detectSequenceType, DEFAULT_DIAGRAM_TITLE, LIFELINE_DASH, DIAGRAM_TYPES, stripFrontmatter };
 export type { INode };
 
 const PAL = ["#ef4444","#f97316","#eab308","#22c55e","#14b8a6","#06b6d4","#3b82f6","#8b5cf6","#ec4899","#f43f5e","#84cc16","#0891b2"];
@@ -267,9 +267,53 @@ const THEMES: Record<string, { bg: string; titleFill: string; boxStroke: string;
 // This is the full buildSvg — identical to page.tsx but importable server-side.
 // `interactive: false` omits the inline hover <script> so the SVG is safe for
 // hosts that strip script-bearing markup (Confluence, GitHub, docs embeds).
-function buildSvg(d: Diagram, o: Opts, l: Layout, createdAt?: string | Date, { interactive = true }: { interactive?: boolean } = {}): string {
+// ── Auto layout - the compact layout, computed from the diagram itself ──────
+// Lives here, not in the editor, so every render path agrees: the editor, the
+// public /svg/<id> route, the index previews, the OG image and a README embed
+// all get the same geometry for the same diagram.
+function computeAutoLayout(d: Diagram, o: Pick<Opts, "iconMode">): Layout {
+    const rows = d.messages.length;
+    const ICON_W = o.iconMode === "icons" ? 26 : 0;
+
+    // Font size: shrink slightly for large sequences
+    const FS = rows > 30 ? 11 : rows > 15 ? 12 : 13;
+
+    // Box width: fit the longest participant label
+    const HPAD = 24;
+    const boxWidth = Math.max(90, ...d.participants.map(p =>
+        Math.ceil(p.label.length * (FS * 0.65) + ICON_W + HPAD)
+    ));
+
+    // Row pitch: the tallest thing on a row is the 24px step circle (cr = 12
+    // below); the pill is FS + 8. 8px of air between rows is the tightest that
+    // still reads as separate rows, at any row count.
+    const stepHeight = Math.max(24, FS + 8) + 8;
+
+    // Spacing: a display value only. Under auto, buildSvg ignores l.spacing and
+    // widens each column pair to exactly the longest pill that crosses it.
+    const maxMsgLen = d.messages.reduce((m, msg) => Math.max(m, msg.text.length), 0);
+    const pillEstimate = maxMsgLen * (FS * 0.65) + 48; // 0.65 char width + circle room
+    const spacing = Math.round(Math.max(boxWidth + 80, boxWidth + pillEstimate));
+
+    // Margin: outer padding on all 4 sides. The one real constraint is a
+    // self-message on the LAST participant: its pill hangs 16px right of the
+    // lifeline and buildSvg does not widen the canvas for it, so the margin must.
+    const last = d.participants[d.participants.length - 1]?.id;
+    const selfPillW = d.messages
+        .filter(m => m.from === last && m.to === last)
+        .reduce((w, m) => Math.max(w, m.text.length * (FS * 0.62) + 12), 0);
+    const margin = Math.max(56, Math.ceil(16 + selfPillW - boxWidth / 2));
+
+    // vPad 0: stepHeight already contains the row, so 0 is tight without overlap
+    return { textSize: FS, boxWidth, spacing, stepHeight, vPad: 0, margin };
+}
+
+function buildSvg(d: Diagram, o: Opts, lIn: Layout, createdAt?: string | Date, { interactive = true }: { interactive?: boolean } = {}): string {
     const { participants: ps_raw, messages: ms } = d;
     if (!ps_raw.length) return "";
+    // Auto layout is resolved here rather than by each caller, so a server
+    // render is identical to what the editor shows.
+    const l = o.autoLayout ? computeAutoLayout(d, o) : lIn;
     const ps = ps_raw.map(p => o.labelOverrides?.[p.id] ? { ...p, label: o.labelOverrides[p.id] } : p);
     const N = ps.length;
     const BR = 6, LP = l.margin ?? 50, MG = l.stepHeight;

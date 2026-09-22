@@ -21,7 +21,12 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
   const { code, settings, title, created_at } = rows[0];
   if (!code?.trim()) return NextResponse.json({ error: "No code" }, { status: 400 });
 
-  const opts: Opts = { ...DEFAULT_OPTS, ...(settings?.opts ?? {}) };
+  // Compact, like the editor: autoLayout is forced on for every public render
+  // so /svg/<id>, the landing tiles, the index previews and a README embed all
+  // show the same diagram the owner sees when they open it. A stored layout may
+  // predate the current auto layout or have been tuned for a diagram that has
+  // since changed; the stored values stay in the row either way.
+  const opts: Opts = { ...DEFAULT_OPTS, ...(settings?.opts ?? {}), autoLayout: true };
   const layout: Layout = { ...DEFAULT_LAYOUT, ...(settings?.layout ?? {}) };
 
   let svg: string;
