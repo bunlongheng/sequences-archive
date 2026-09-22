@@ -38,7 +38,7 @@ export default async function Image({ params }: { params: Promise<{ id: string }
     const { rows } = await db.query("SELECT code, settings, title, created_at FROM sequences WHERE id = $1", [id]);
     if (rows.length && rows[0].code?.trim()) {
       const { code, settings, title: dbTitle, created_at } = rows[0];
-      const opts: Opts = { ...DEFAULT_OPTS, ...(settings?.opts ?? {}) };
+      const opts: Opts = { ...DEFAULT_OPTS, ...(settings?.opts ?? {}), autoLayout: true };
       const layout: Layout = { ...DEFAULT_LAYOUT, ...(settings?.layout ?? {}) };
       const diagram = parse(code);
       if (!diagram.title && dbTitle) diagram.title = dbTitle;

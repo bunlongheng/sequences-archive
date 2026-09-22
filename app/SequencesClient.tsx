@@ -75,7 +75,7 @@ function useSequenceSvg(d: Sequence) {
     try {
       const parsed = parse(d.code);
       if (!parsed.title && d.title) parsed.title = d.title;
-      const opts: Opts = { ...DEFAULT_OPTS, ...(d.settings?.opts ?? {}) };
+      const opts: Opts = { ...DEFAULT_OPTS, ...(d.settings?.opts ?? {}), autoLayout: true };
       const layout: Layout = { ...DEFAULT_LAYOUT, ...(d.settings?.layout ?? {}) };
       const svg = buildSvg(parsed, opts, layout, d.created_at, { interactive: false })
         .replace(/ width="[\d.]+" height="[\d.]+" viewBox=/, ' width="100%" height="100%" viewBox=');
